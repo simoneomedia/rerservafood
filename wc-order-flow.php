@@ -32,6 +32,7 @@ final class WCOF_Plugin {
         add_action('woocommerce_checkout_order_processed', [$this,'set_order_awaiting'], 99, 3);
         add_action('woocommerce_new_order',               [$this,'force_awaiting_on_create'], 9999, 1);
         add_filter('woocommerce_payment_complete_order_status', [$this,'force_awaiting_on_payment_complete'], 9999, 3);
+        add_action('woocommerce_order_status_changed',    [$this,'undo_auto_approval'], 9999, 4);
 
         // Metabox + admin actions
         add_action('add_meta_boxes', [$this,'add_metabox']);
@@ -141,6 +142,13 @@ final class WCOF_Plugin {
         if(!$order) $order = wc_get_order($order_id);
         if($order && !$order->get_meta(self::META_DECIDED)) return 'awaiting-approval';
         return $status;
+    }
+    public function undo_auto_approval($order_id, $old_status, $new_status, $order){
+        if(!$order instanceof WC_Order) $order = wc_get_order($order_id);
+        if(!$order || $order->get_meta(self::META_DECIDED)) return;
+        if(in_array($new_status, ['processing','completed'], true)){
+            $order->update_status(str_replace('wc-','', self::STATUS_AWAITING),'Forzato: in attesa di approvazione.');
+        }
     }
 
     /* ===== Metabox ===== */
