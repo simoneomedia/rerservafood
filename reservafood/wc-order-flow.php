@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: WC Order Flow — Approvals + ETA + Push (All‑in‑one)
+ * Plugin Name: Reeservafood
  * Description: App‑style order approvals for WooCommerce with ETA, “Rider on the way”, live order board, and integrated OneSignal Web Push (no extra plugin). Mobile‑first UI.
- * Author: ChatGPT
+ * Author: Reeserva
  * Version: 1.8.2
  * Requires at least: 5.8
  * Requires PHP: 7.4
