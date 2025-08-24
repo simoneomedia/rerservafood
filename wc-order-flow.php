@@ -28,6 +28,13 @@ final class WCOF_Plugin {
         flush_rewrite_rules();
     }
     public static function deactivate(){ flush_rewrite_rules(); }
+        add_role('rider', 'Rider', ['read'=>true,'wcof_rider'=>true]);
+        flush_rewrite_rules();
+    }
+    public static function deactivate(){
+        remove_role('rider');
+        flush_rewrite_rules();
+    }
 
     public function __construct() {
         add_action('init', [$this,'register_statuses']);
@@ -44,6 +51,7 @@ final class WCOF_Plugin {
         add_action('admin_post_wcof_approve', [$this,'handle_approve']);
         add_action('admin_post_wcof_reject',  [$this,'handle_reject']);
         add_action('admin_post_wcof_out_for_delivery', [$this,'handle_out_for_delivery']);
+        add_action('admin_post_wcof_complete', [$this,'handle_complete']);
 
         // Thank you page hero (live)
         add_action('woocommerce_thankyou', [$this,'thankyou_hero'], 5);
@@ -215,7 +223,7 @@ final class WCOF_Plugin {
         wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url('post.php?post='.$order_id.'&action=edit')); exit;
     }
     public function handle_out_for_delivery(){
-        if(!current_user_can('manage_woocommerce')) wp_die('Non autorizzato');
+        if(!(current_user_can('manage_woocommerce') || current_user_can('wcof_rider'))) wp_die('Non autorizzato');
         $order_id = absint($_GET['order_id']??0);
         check_admin_referer('wcof_out_for_delivery_'.$order_id);
         $o = wc_get_order($order_id);
@@ -227,15 +235,30 @@ final class WCOF_Plugin {
         wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url('post.php?post='.$order_id.'&action=edit')); exit;
     }
 
+    public function handle_complete(){
+        if(!(current_user_can('manage_woocommerce') || current_user_can('wcof_rider'))) wp_die('Non autorizzato');
+        $order_id = absint($_GET['order_id']??0);
+        check_admin_referer('wcof_complete_'.$order_id);
+        $o = wc_get_order($order_id);
+        if($o){
+            $o->update_status('completed','Consegna completata.');
+            $o->save();
+        }
+        wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url('post.php?post='.$order_id.'&action=edit')); exit;
+    }
+
     /* ===== REST ===== */
     public function register_rest_routes(){
         register_rest_route('wcof/v1','/orders', [
             'methods' => 'GET',
-            'permission_callback' => function(){ return current_user_can('manage_woocommerce'); },
+            'permission_callback' => function(){ return current_user_can('manage_woocommerce') || current_user_can('wcof_rider'); },
             'callback' => function($req){
                 $limit = min(200, max(1, intval($req->get_param('limit') ?: 40)));
                 $after = intval($req->get_param('after_id') ?: 0);
                 $allowed = ['pending','processing','completed','on-hold','cancelled','refunded','failed','awaiting-approval','out-for-delivery','rejected'];
+                if(!current_user_can('manage_woocommerce')){
+                    $allowed = ['processing','out-for-delivery'];
+                }
                 $orders = wc_get_orders([
                     'limit'=>$limit, 'orderby'=>'date','order'=>'DESC',
                     'type'=>'shop_order','return'=>'objects','status'=>$allowed
@@ -250,6 +273,18 @@ final class WCOF_Plugin {
                     $eta=(int)$o->get_meta(self::META_ETA);
                     $items=[]; foreach($o->get_items() as $it){ $items[]=['name'=>$it->get_name(),'qty'=>(int)$it->get_quantity()]; }
                     $total_raw = html_entity_decode( wp_strip_all_tags($o->get_formatted_order_total()), ENT_QUOTES, 'UTF-8' );
+                    $address = trim(implode(', ', array_filter([
+                        $o->get_shipping_address_1(), $o->get_shipping_address_2(),
+                        trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
+                    ])));
+                    if(!$address){
+                        $address = trim(implode(', ', array_filter([
+                            $o->get_billing_address_1(), $o->get_billing_address_2(),
+                            trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                        ])));
+                    }
+                    $phone = $o->get_billing_phone();
+                    $note  = $o->get_customer_note();
                     $out[]=[
                         'id'=>$id,'number'=>$o->get_order_number(),
                         'status'=>'wc-'.$status_slug,'eta'=>$eta,
@@ -260,6 +295,10 @@ final class WCOF_Plugin {
                         'approve_url'=>wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id),
                         'reject_url' =>wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id),
                         'out_url'   =>wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id),
+                        'complete_url'=>wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id),
+                        'address'=>$address,
+                        'phone'=>$phone,
+                        'note'=>$note,
                     ];
                 }
                 return ['latest_id'=>$latest_id,'orders'=>$out];
@@ -367,8 +406,13 @@ final class WCOF_Plugin {
 
     /* ===== Orders board (front) ===== */
     public function shortcode_orders_admin($atts=[]){
-        if(!current_user_can('manage_woocommerce')) return '<div class="wcof-alert">Solo gli amministratori possono vedere questa pagina.</div>';
-        $orders = wc_get_orders(['limit'=>50,'orderby'=>'date','order'=>'DESC','type'=>'shop_order','return'=>'objects']);
+        if(!(current_user_can('manage_woocommerce') || current_user_can('wcof_rider')))
+            return '<div class="wcof-alert">Solo gli amministratori o i rider possono vedere questa pagina.</div>';
+        $args=['limit'=>50,'orderby'=>'date','order'=>'DESC','type'=>'shop_order','return'=>'objects'];
+        if(!current_user_can('manage_woocommerce')){
+            $args['status']=['processing','out-for-delivery'];
+        }
+        $orders = wc_get_orders($args);
         $last_id=0;
         ob_start(); ?>
         <style>
@@ -389,6 +433,8 @@ final class WCOF_Plugin {
           .btn{border:none;border-radius:12px;padding:.6rem .9rem;font-weight:700;color:#fff;cursor:pointer}
           .btn-approve{background:#2563eb} .btn-reject{background:#94a3b8} .btn-complete{background:#10b981}
           .wcof-items{padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
+          .wcof-info{margin-top:8px;font-size:14px;color:#334155}
+          .wcof-info div{margin-top:4px}
           .wcof-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ececec}
           .wcof-item:last-child{border-bottom:0}
           .wcof-new{animation:wcofPulse 1s ease-in-out 5;background:#ecfdf5}
@@ -429,14 +475,35 @@ final class WCOF_Plugin {
                   <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id) ); ?>">Approva</button>
                   <button class="btn btn-reject" data-action="reject" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id) ); ?>">Rifiuta</button>
                 <?php elseif($status==='wc-processing'): ?>
-                  <a class="btn btn-complete" data-action="out" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">Complete</a>
+                  <a class="btn btn-complete" data-action="out" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">In Consegna</a>
+                <?php elseif($status===self::STATUS_OUT_FOR_DELIVERY): ?>
+                  <a class="btn btn-complete" data-action="complete" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>">Complete</a>
                 <?php else: ?><em style="color:#94a3b8">—</em><?php endif; ?>
               </div>
             </div>
+            <?php
+                $address = trim(implode(', ', array_filter([
+                    $o->get_shipping_address_1(), $o->get_shipping_address_2(),
+                    trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
+                ])));
+                if(!$address){
+                    $address = trim(implode(', ', array_filter([
+                        $o->get_billing_address_1(), $o->get_billing_address_2(),
+                        trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                    ])));
+                }
+                $phone = $o->get_billing_phone();
+                $note  = $o->get_customer_note();
+            ?>
             <div class="wcof-items">
               <?php foreach($o->get_items() as $it): ?>
                 <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
               <?php endforeach; ?>
+              <div class="wcof-info">
+                <div><strong>Indirizzo:</strong> <?php echo esc_html($address); ?></div>
+                <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?></div>
+                <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
+              </div>
             </div>
           </div>
         <?php endforeach; ?>
