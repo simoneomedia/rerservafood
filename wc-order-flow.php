@@ -25,9 +25,6 @@ final class WCOF_Plugin {
         $self = new self();
         $self->register_sw_rewrite();
         if( !get_option('wcof_setup_done') ) add_option('wcof_setup_done', 0);
-        flush_rewrite_rules();
-    }
-    public static function deactivate(){ flush_rewrite_rules(); }
         add_role('rider', 'Rider', ['read'=>true,'wcof_rider'=>true]);
         flush_rewrite_rules();
     }
