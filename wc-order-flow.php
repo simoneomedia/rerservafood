@@ -24,6 +24,10 @@ final class WCOF_Plugin {
     public static function activate(){
         $self = new self();
         $self->register_sw_rewrite();
+        if( !get_option('wcof_setup_done') ) add_option('wcof_setup_done', 0);
+        flush_rewrite_rules();
+    }
+    public static function deactivate(){ flush_rewrite_rules(); }
         add_role('rider', 'Rider', ['read'=>true,'wcof_rider'=>true]);
         flush_rewrite_rules();
     }
@@ -61,6 +65,8 @@ final class WCOF_Plugin {
         // Settings + OneSignal
         add_action('admin_menu', [$this,'admin_menu']);
         add_action('admin_init', [$this,'register_settings']);
+        add_action('admin_init', [$this,'maybe_redirect_setup']);
+        add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
@@ -515,35 +521,59 @@ final class WCOF_Plugin {
 
     /* ===== Settings page ===== */
     public function admin_menu(){
-        add_submenu_page('woocommerce','Order Flow — Push','Order Flow — Push','manage_woocommerce','wcof-push',[$this,'settings_page']);
+        add_submenu_page('woocommerce','ReeservaFood','ReeservaFood','manage_woocommerce','wcof-settings',[$this,'settings_page']);
+        add_submenu_page(null,'ReeservaFood Setup','ReeservaFood Setup','manage_woocommerce','wcof-setup',[$this,'setup_page']);
     }
     public function register_settings(){
         register_setting(self::OPTION_KEY, self::OPTION_KEY, ['sanitize_callback'=>[$this,'sanitize_settings']]);
     }
     public function sanitize_settings($v){
         $v=is_array($v)?$v:[];
-        return [
+        $out=[
             'enable'=>!empty($v['enable'])?1:0,
             'app_id'=>isset($v['app_id'])?sanitize_text_field($v['app_id']):'',
             'rest_key'=>isset($v['rest_key'])?sanitize_text_field($v['rest_key']):'',
             'notify_admin_new'=>!empty($v['notify_admin_new'])?1:0,
             'notify_user_processing'=>!empty($v['notify_user_processing'])?1:0,
             'notify_user_out'=>!empty($v['notify_user_out'])?1:0,
+            'address'=>isset($v['address'])?sanitize_text_field($v['address']):'',
+            'open_time'=>isset($v['open_time'])?sanitize_text_field($v['open_time']):'',
+            'close_time'=>isset($v['close_time'])?sanitize_text_field($v['close_time']):'',
+            'store_closed'=>!empty($v['store_closed'])?1:0,
         ];
+        $days=['mon','tue','wed','thu','fri','sat','sun'];
+        $out['open_days']=[];
+        if(!empty($v['open_days']) && is_array($v['open_days'])){
+            foreach($v['open_days'] as $d){ if(in_array($d,$days,true)) $out['open_days'][]=$d; }
+        }
+        return $out;
     }
     public function settings(){
         $d=get_option(self::OPTION_KEY,[]);
         return wp_parse_args($d,[
             'enable'=>0,'app_id'=>'','rest_key'=>'',
-            'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1
+            'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
+            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0
         ]);
     }
     public function settings_page(){
         $s=$this->settings(); ?>
         <div class="wrap">
-          <h1>Order Flow — Web Push (OneSignal)</h1>
+          <h1>ReeservaFood Settings</h1>
           <form method="post" action="options.php">
             <?php settings_fields(self::OPTION_KEY); ?>
+            <h2>Store</h2>
+            <table class="form-table" role="presentation">
+              <tr><th scope="row">Address</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
+              <tr><th scope="row">Opening days</th><td>
+                <?php foreach(['mon'=>'Mon','tue'=>'Tue','wed'=>'Wed','thu'=>'Thu','fri'=>'Fri','sat'=>'Sat','sun'=>'Sun'] as $k=>$lbl): ?>
+                  <label style="margin-right:8px"><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_days][]" value="<?php echo esc_attr($k); ?>" <?php checked(in_array($k,$s['open_days'],true)); ?>/> <?php echo esc_html($lbl); ?></label>
+                <?php endforeach; ?>
+              </td></tr>
+              <tr><th scope="row">Opening time</th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
+              <tr><th scope="row">Store closed</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Yes</label></td></tr>
+            </table>
+            <h2>OneSignal</h2>
             <table class="form-table" role="presentation">
               <tr><th scope="row">Enable push</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[enable]" value="1" <?php checked($s['enable'],1); ?>/> On</label></td></tr>
               <tr><th scope="row">OneSignal App ID</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[app_id]" value="<?php echo esc_attr($s['app_id']); ?>" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"/></td></tr>
@@ -563,6 +593,52 @@ final class WCOF_Plugin {
           <p><strong>Shortcodes</strong>: <code>[wcof_orders_admin]</code> (orders board), <code>[wcof_push_button]</code> (subscribe button), <code>[wcof_push_debug]</code> (admin diagnostics).</p>
         </div>
         <?php
+    }
+
+    public function maybe_redirect_setup(){
+        if( !current_user_can('manage_woocommerce') ) return;
+        if( get_option('wcof_setup_done') ) return;
+        if( isset($_GET['page']) && $_GET['page']==='wcof-setup' ) return;
+        wp_safe_redirect(admin_url('admin.php?page=wcof-setup'));
+        exit;
+    }
+
+    public function setup_page(){
+        $s=$this->settings(); ?>
+        <div class="wrap">
+          <h1>Welcome to ReeservaFood</h1>
+          <p>Let's configure your store.</p>
+          <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <?php wp_nonce_field('wcof_finish_setup'); ?>
+            <input type="hidden" name="action" value="wcof_finish_setup"/>
+            <table class="form-table" role="presentation">
+              <tr><th scope="row">Shop address</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
+              <tr><th scope="row">Opening days</th><td>
+                <?php foreach(['mon'=>'Mon','tue'=>'Tue','wed'=>'Wed','thu'=>'Thu','fri'=>'Fri','sat'=>'Sat','sun'=>'Sun'] as $k=>$lbl): ?>
+                  <label style="margin-right:8px"><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_days][]" value="<?php echo esc_attr($k); ?>" <?php checked(in_array($k,$s['open_days'],true)); ?>/> <?php echo esc_html($lbl); ?></label>
+                <?php endforeach; ?>
+              </td></tr>
+              <tr><th scope="row">Opening time</th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
+              <tr><th scope="row">Products</th><td><a href="<?php echo esc_url(admin_url('edit.php?post_type=product')); ?>" class="button">Manage products</a></td></tr>
+            </table>
+            <?php submit_button('Start Selling now','primary','start'); ?>
+            <?php submit_button('Keep the store closed for now','secondary','keep'); ?>
+          </form>
+        </div>
+        <?php
+    }
+
+    public function handle_finish_setup(){
+        if(!current_user_can('manage_woocommerce')) wp_die('Non autorizzato');
+        check_admin_referer('wcof_finish_setup');
+        $current=$this->settings();
+        $input=$_POST[self::OPTION_KEY]??[];
+        $opts=array_merge($current,$this->sanitize_settings($input));
+        $opts['store_closed']=isset($_POST['start'])?0:1;
+        update_option(self::OPTION_KEY,$opts);
+        update_option('wcof_setup_done',1);
+        wp_safe_redirect(admin_url('admin.php?page=wcof-settings'));
+        exit;
     }
 
     /* ===== OneSignal init + push senders ===== */
