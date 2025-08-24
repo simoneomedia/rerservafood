@@ -21,13 +21,18 @@
               <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.approve_url||'')}">Approva</button>
               <button class="btn btn-reject" data-action="reject" data-url="${htmlEscape(o.reject_url||'')}">Rifiuta</button>`;
     } else if(o.status==='wc-processing'){
-      return `<a class="btn btn-complete" data-action="out" href="${htmlEscape(o.out_url||'')}">Complete</a>`;
+      return `<a class="btn btn-complete" data-action="out" href="${htmlEscape(o.out_url||'')}">In Consegna</a>`;
+    } else if(o.status==='wc-out-for-delivery'){
+      return `<a class="btn btn-complete" data-action="complete" href="${htmlEscape(o.complete_url||'')}">Complete</a>`;
     }
     return `<em style="color:#94a3b8">—</em>`;
   }
   function cardHTML(o){
     const items = Array.isArray(o.items)?o.items:[];
     const arrival = o.arrival ? `<span class="wcof-arrival">${htmlEscape(o.arrival)}</span>` : '—';
+    const address = htmlEscape(o.address||'');
+    const phone = htmlEscape(o.phone||'');
+    const note = htmlEscape(o.note||'');
     return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
         <div class="wcof-left ${statusBar(o.status||'wc-awaiting-approval')}"></div>
@@ -41,6 +46,11 @@
       </div>
       <div class="wcof-items" style="padding:12px 16px;background:#f9fafb;border-top:1px dashed #e5e7eb">
         ${items.map(it=>`<div class="wcof-item"><span>${htmlEscape(it.name)}</span> <strong>× ${it.qty|0}</strong></div>`).join('')}
+        <div class="wcof-info">
+          <div><strong>Indirizzo:</strong> ${address}</div>
+          <div><strong>Telefono:</strong> ${phone}</div>
+          ${note?`<div><strong>Note:</strong> ${note}</div>`:''}
+        </div>
       </div>
     </div>`;
   }
@@ -86,7 +96,11 @@
       window.location.href = (t.getAttribute('data-url')||t.dataset.url||'').replace(/&amp;/g,'&');
     }
     if(t.dataset && t.dataset.action==='out'){
-      if(!confirm('Segnare come "Rider in consegna"?')) { e.preventDefault(); return; }
+      if(!confirm('Segnare come "In consegna"?')) { e.preventDefault(); return; }
+      t.setAttribute('href', (t.getAttribute('href')||'').replace(/&amp;/g,'&'));
+    }
+    if(t.dataset && t.dataset.action==='complete'){
+      if(!confirm('Segnare come "Completato"?')) { e.preventDefault(); return; }
       t.setAttribute('href', (t.getAttribute('href')||'').replace(/&amp;/g,'&'));
     }
   });
