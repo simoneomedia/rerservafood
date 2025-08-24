@@ -3,7 +3,7 @@
  * Plugin Name: Reeservafood
  * Description: App‑style order approvals for WooCommerce with ETA, “Rider on the way”, live order board, and integrated OneSignal Web Push (no extra plugin). Mobile‑first UI.
  * Author: Reeserva
- * Version: 1.8.2
+ * Version: 1.9.0
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * License: GPLv2 or later
@@ -45,6 +45,9 @@ final class WCOF_Plugin {
 
         // Orders board (front)
         add_shortcode('wcof_orders_admin',   [$this,'shortcode_orders_admin']);
+
+        // Product manager (front)
+        add_shortcode('wcof_product_manager', [$this,'shortcode_product_manager']);
 
         // REST
         add_action('rest_api_init', [$this,'register_rest_routes']);
@@ -436,13 +439,37 @@ final class WCOF_Plugin {
         </div>
         <button id="wcof-sound" class="wcof-sound" type="button" title="Sound">🔔 Sound</button>
         <?php
-        wp_enqueue_script('wcof-orders', plugins_url('assets/orders-admin.js', __FILE__), [], '1.8.2', true);
+        wp_enqueue_script('wcof-orders', plugins_url('assets/orders-admin.js', __FILE__), [], '1.9.0', true);
         wp_localize_script('wcof-orders','WCOF_ORD',[
             'rest'=>esc_url_raw(rest_url('wcof/v1')),
             'nonce'=>wp_create_nonce('wp_rest'),
             'last_id'=>$last_id
         ]);
         return ob_get_clean();
+    }
+
+    /* ===== Product manager (front) ===== */
+    public function shortcode_product_manager($atts=[]){
+        if(!current_user_can('manage_woocommerce')) return '';
+        wp_enqueue_script('wcof-product-manager', plugins_url('assets/product-manager.js', __FILE__), [], '1.9.0', true);
+        wp_localize_script('wcof-product-manager', 'WCOF_PM', [
+            'root'  => esc_url_raw( rest_url('wc/v3/') ),
+            'nonce' => wp_create_nonce('wp_rest')
+        ]);
+        ob_start(); ?>
+        <style>
+          #wcof-product-manager{font-family:sans-serif;display:flex;flex-direction:column;gap:20px}
+          .wcof-cat{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+          .wcof-cat-header{display:flex;justify-content:space-between;align-items:center;background:#f1f5f9;padding:10px;font-weight:600}
+          .wcof-prod-list{display:flex;flex-direction:column;gap:8px;padding:10px}
+          .wcof-prod{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px}
+          .wcof-prod-form{display:flex;flex-direction:column;gap:10px}
+          .wcof-prod-form input,.wcof-prod-form textarea,.wcof-prod-form select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px}
+          .wcof-prod-form button{padding:10px;background:#111;color:#fff;border:none;border-radius:6px}
+          @media(min-width:480px){.wcof-prod-form{max-width:420px;margin:0 auto}}
+        </style>
+        <div id="wcof-product-manager"></div>
+        <?php return ob_get_clean();
     }
 
     /* ===== Settings page ===== */
@@ -492,7 +519,7 @@ final class WCOF_Plugin {
             <?php submit_button(); ?>
           </form>
           <p><em>Service worker files are auto-served at <code>/OneSignalSDKWorker.js</code> and <code>/OneSignalSDKUpdaterWorker.js</code> via WordPress rewrites (no physical files needed).</em></p>
-          <p><strong>Shortcodes</strong>: <code>[wcof_orders_admin]</code> (orders board), <code>[wcof_push_button]</code> (subscribe button), <code>[wcof_push_debug]</code> (admin diagnostics).</p>
+          <p><strong>Shortcodes</strong>: <code>[wcof_orders_admin]</code> (orders board), <code>[wcof_product_manager]</code> (product manager), <code>[wcof_push_button]</code> (subscribe button), <code>[wcof_push_debug]</code> (admin diagnostics).</p>
         </div>
         <?php
     }
@@ -501,7 +528,7 @@ final class WCOF_Plugin {
     public function maybe_inject_onesignal_sdk(){
         $s = $this->settings();
         if( empty($s['enable']) || empty($s['app_id']) ) return;
-        wp_enqueue_script('wcof-onesignal', plugins_url('assets/onesignal-init.js', __FILE__), [], '1.8.2', true);
+        wp_enqueue_script('wcof-onesignal', plugins_url('assets/onesignal-init.js', __FILE__), [], '1.9.0', true);
         wp_localize_script('wcof-onesignal', 'WCOF_PUSH', [
             'appId' => $s['app_id'],
             'userId' => get_current_user_id(),
@@ -567,7 +594,7 @@ final class WCOF_Plugin {
     /* ===== Push shortcodes ===== */
     public function shortcode_push_button($atts=[]){
         if( empty($this->settings()['enable']) ) return '';
-        wp_enqueue_script('wcof-push-btn', plugins_url('assets/push-button.js', __FILE__), [], '1.8.2', true);
+        wp_enqueue_script('wcof-push-btn', plugins_url('assets/push-button.js', __FILE__), [], '1.9.0', true);
         ob_start(); ?>
         <style>.wcof-push-wrap{display:flex;align-items:center;gap:10px;margin:8px 0}.wcof-push-btn{background:#111;color:#fff;border:none;border-radius:999px;padding:.6rem 1rem;font-weight:700;cursor:pointer}.wcof-push-status{font-size:.9rem;color:#475569}</style>
         <div class="wcof-push-wrap">
@@ -579,7 +606,7 @@ final class WCOF_Plugin {
     public function shortcode_push_debug($atts=[]){
         if(!current_user_can('manage_woocommerce')) return '';
         if( empty($this->settings()['enable']) ) return '<em>Enable push in settings first.</em>';
-        wp_enqueue_script('wcof-push-debug', plugins_url('assets/push-debug.js', __FILE__), [], '1.8.2', true);
+        wp_enqueue_script('wcof-push-debug', plugins_url('assets/push-debug.js', __FILE__), [], '1.9.0', true);
         return '<div id="wcof-push-debug" style="padding:12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc"></div>';
     }
 }
