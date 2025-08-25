@@ -44,7 +44,7 @@ final class WCOF_Plugin {
         add_filter('woocommerce_payment_complete_order_status', [$this,'force_awaiting_on_payment_complete'], 9999, 3);
         add_action('woocommerce_order_status_changed',    [$this,'undo_auto_approval'], 9999, 4);
         // Prevent automatic capture on supported gateways
-        add_filter('wc_stripe_capture_charge', [$this,'maybe_defer_stripe_capture'], 10, 2);
+        add_filter('wc_stripe_create_intent_args', [$this,'maybe_defer_stripe_capture'], 10, 2);
         add_filter('wcpay_should_use_manual_capture', [$this,'maybe_defer_wcpay_capture'], 10, 2);
 
         // Metabox + admin actions
@@ -176,9 +176,11 @@ final class WCOF_Plugin {
         }
     }
 
-    public function maybe_defer_stripe_capture($capture, $order){
-        if(!$order instanceof WC_Order || !$order->get_meta(self::META_DECIDED)) return false;
-        return $capture;
+    public function maybe_defer_stripe_capture($args, $order){
+        if($order instanceof WC_Order && !$order->get_meta(self::META_DECIDED)){
+            $args['capture_method'] = 'manual';
+        }
+        return $args;
     }
 
     public function maybe_defer_wcpay_capture($manual, $order){
@@ -238,10 +240,12 @@ final class WCOF_Plugin {
             $prev = $o->get_status();
             $pm = $o->get_payment_method();
             if(0 === strpos($pm, 'stripe') && !$o->is_paid()){
-                $charge_id = $o->get_transaction_id();
-                if($charge_id && class_exists('WC_Stripe_API')){
+                $intent = $o->get_meta('_stripe_intent_id');
+                if($intent && class_exists('WC_Stripe_API')){
+
                     try{
-                        \WC_Stripe_API::request([], 'charges/'.$charge_id.'/capture');
+                        $res = \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/capture');
+                        $charge_id = $res['charges']['data'][0]['id'] ?? $intent;
                         $o->payment_complete($charge_id);
                     }catch(\Exception $e){
                         $o->add_order_note('Stripe capture failed: '.$e->getMessage());
