@@ -21,7 +21,7 @@
               <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.approve_url||'')}">Approva</button>
               <button class="btn btn-reject" data-action="reject" data-url="${htmlEscape(o.reject_url||'')}">Rifiuta</button>`;
     } else if(o.status==='wc-processing'){
-      return `<a class="btn btn-complete" data-action="out" href="${htmlEscape(o.out_url||'')}">In Consegna</a>`;
+      return `<a class="btn btn-out" data-action="out" data-complete-url="${htmlEscape(o.complete_url||'')}" href="${htmlEscape(o.out_url||'')}">In Consegna</a>`;
     } else if(o.status==='wc-out-for-delivery'){
       return `<a class="btn btn-complete" data-action="complete" href="${htmlEscape(o.complete_url||'')}">Complete</a>`;
     }
@@ -96,12 +96,34 @@
       window.location.href = (t.getAttribute('data-url')||t.dataset.url||'').replace(/&amp;/g,'&');
     }
     if(t.dataset && t.dataset.action==='out'){
-      if(!confirm('Segnare come "In consegna"?')) { e.preventDefault(); return; }
-      t.setAttribute('href', (t.getAttribute('href')||'').replace(/&amp;/g,'&'));
+      e.preventDefault();
+      if(!confirm('Segnare come "In consegna"?')) return;
+      const url = (t.getAttribute('href')||'').replace(/&amp;/g,'&');
+      fetch(url, {credentials:'include'}).then(()=>{
+        const card = t.closest('.wcof-card');
+        if(card){
+          card.setAttribute('data-status','wc-out-for-delivery');
+          const left = card.querySelector('.wcof-left');
+          if(left){ left.classList.remove('st-proc'); left.classList.add('st-out'); }
+          const badge = card.querySelector('.wcof-badge');
+          if(badge) badge.textContent = 'wc-out-for-delivery';
+          t.textContent = 'Complete';
+          t.classList.remove('btn-out');
+          t.classList.add('btn-complete');
+          t.dataset.action = 'complete';
+          const cu = t.dataset.completeUrl || '';
+          t.setAttribute('href', cu.replace(/&amp;/g,'&'));
+        }
+      }).catch(()=>{ window.location.href = url; });
     }
     if(t.dataset && t.dataset.action==='complete'){
-      if(!confirm('Segnare come "Completato"?')) { e.preventDefault(); return; }
-      t.setAttribute('href', (t.getAttribute('href')||'').replace(/&amp;/g,'&'));
+      e.preventDefault();
+      if(!confirm('Segnare come "Completato"?')) return;
+      const url = (t.getAttribute('href')||'').replace(/&amp;/g,'&');
+      fetch(url, {credentials:'include'}).then(()=>{
+        const card = t.closest('.wcof-card');
+        if(card) card.remove();
+      }).catch(()=>{ window.location.href = url; });
     }
   });
 })();
