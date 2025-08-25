@@ -46,6 +46,8 @@ final class WCOF_Plugin {
         // Prevent automatic capture on supported gateways
         add_filter('wc_stripe_create_intent_args', [$this,'maybe_defer_stripe_capture'], 10, 2);
         add_filter('wcpay_should_use_manual_capture', [$this,'maybe_defer_wcpay_capture'], 10, 2);
+        add_filter('woocommerce_paypal_payments_order_intent', [$this,'maybe_defer_paypal_capture'], 10, 2);
+        add_filter('woocommerce_paypal_args', [$this,'maybe_defer_paypal_capture'], 10, 2);
 
         // Metabox + admin actions
         add_action('add_meta_boxes', [$this,'add_metabox']);
@@ -188,6 +190,15 @@ final class WCOF_Plugin {
         return $manual;
     }
 
+    public function maybe_defer_paypal_capture($arg, $order){
+        if(!$order instanceof WC_Order || $order->get_meta(self::META_DECIDED)) return $arg;
+        if(is_array($arg)){
+            $arg['paymentaction'] = 'authorization';
+            return $arg;
+        }
+        return 'AUTHORIZE';
+    }
+
     /* ===== Metabox ===== */
     public function add_metabox(){
         add_meta_box('wcof_metabox','Stato ordine (app style)',[$this,'render_metabox'],'shop_order','side','high');
@@ -239,16 +250,35 @@ final class WCOF_Plugin {
             $o->save();
             $prev = $o->get_status();
             $pm = $o->get_payment_method();
-            if(0 === strpos($pm, 'stripe') && !$o->is_paid()){
-                $intent = $o->get_meta('_stripe_intent_id');
-                if($intent && class_exists('WC_Stripe_API')){
-
-                    try{
-                        $res = \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/capture');
-                        $charge_id = $res['charges']['data'][0]['id'] ?? $intent;
-                        $o->payment_complete($charge_id);
-                    }catch(\Exception $e){
-                        $o->add_order_note('Stripe capture failed: '.$e->getMessage());
+            if(!$o->is_paid()){
+                if(0 === strpos($pm, 'stripe')){
+                    $intent = $o->get_meta('_stripe_intent_id');
+                    if($intent && class_exists('WC_Stripe_API')){
+                        try{
+                            $res = \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/capture');
+                            $charge_id = $res['charges']['data'][0]['id'] ?? $intent;
+                            $o->payment_complete($charge_id);
+                        }catch(\Exception $e){
+                            $o->add_order_note('Stripe capture failed: '.$e->getMessage());
+                        }
+                    }
+                } else {
+                    $gateway = function_exists('wc_get_payment_gateway_by_order') ? wc_get_payment_gateway_by_order($o) : null;
+                    if($gateway){
+                        try{
+                            if(method_exists($gateway,'capture_charge')){
+                                $gateway->capture_charge($o);
+                                $o->payment_complete($o->get_transaction_id());
+                            }elseif(method_exists($gateway,'capture_payment')){
+                                $gateway->capture_payment($o);
+                                $o->payment_complete($o->get_transaction_id());
+                            }elseif(method_exists($gateway,'process_capture')){
+                                $gateway->process_capture($o);
+                                $o->payment_complete($o->get_transaction_id());
+                            }
+                        }catch(\Exception $e){
+                            $o->add_order_note($gateway->id.' capture failed: '.$e->getMessage());
+                        }
                     }
                 }
             }
@@ -272,6 +302,27 @@ final class WCOF_Plugin {
                         \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/cancel');
                     }catch(\Exception $e){
                         $o->add_order_note('Stripe cancel failed: '.$e->getMessage());
+                    }
+                }
+            } else {
+                $gateway = function_exists('wc_get_payment_gateway_by_order') ? wc_get_payment_gateway_by_order($o) : null;
+                if($gateway){
+                    try{
+                        if(method_exists($gateway,'cancel_payment')){
+                            $gateway->cancel_payment($o);
+                        }elseif(method_exists($gateway,'void_payment')){
+                            $gateway->void_payment($o);
+                        }elseif(method_exists($gateway,'cancel_authorization')){
+                            $gateway->cancel_authorization($o);
+                        }elseif(method_exists($gateway,'void_charge')){
+                            $gateway->void_charge($o);
+                        }elseif(method_exists($gateway,'void_transaction')){
+                            $gateway->void_transaction($o);
+                        }elseif(method_exists($gateway,'cancel_charge')){
+                            $gateway->cancel_charge($o);
+                        }
+                    }catch(\Exception $e){
+                        $o->add_order_note($gateway->id.' cancel failed: '.$e->getMessage());
                     }
                 }
             }
