@@ -242,6 +242,7 @@ final class WCOF_Plugin {
             if(0 === strpos($pm, 'stripe') && !$o->is_paid()){
                 $intent = $o->get_meta('_stripe_intent_id');
                 if($intent && class_exists('WC_Stripe_API')){
+
                     try{
                         $res = \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/capture');
                         $charge_id = $res['charges']['data'][0]['id'] ?? $intent;
