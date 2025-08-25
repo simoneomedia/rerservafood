@@ -21,7 +21,9 @@
               <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.approve_url||'')}">Approva</button>
               <button class="btn btn-reject" data-action="reject" data-url="${htmlEscape(o.reject_url||'')}">Rifiuta</button>`;
     } else if(o.status==='wc-processing'){
-      return `<a class="btn btn-out" data-action="out" data-complete-url="${htmlEscape(o.complete_url||'')}" href="${htmlEscape(o.out_url||'')}">In Consegna</a>`;
+      return `<input type="number" min="0" step="1" placeholder="ETA min" value="${htmlEscape(o.eta||'')}" class="wcof-eta">
+              <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.set_eta_url||'')}">Aggiorna ETA</button>
+              <a class="btn btn-out" data-action="out" data-complete-url="${htmlEscape(o.complete_url||'')}" href="${htmlEscape(o.out_url||'')}">In Consegna</a>`;
     } else if(o.status==='wc-out-for-delivery'){
       return `<a class="btn btn-complete" data-action="complete" href="${htmlEscape(o.complete_url||'')}">Complete</a>`;
     }

@@ -15,6 +15,7 @@ if (!defined('ABSPATH')) exit;
 final class WCOF_Plugin {
     const OPTION_KEY = 'wcof_settings';
     const META_ETA   = '_wcof_eta_minutes';
+    const META_ARRIVAL = '_wcof_arrival_ts';
     const META_DECIDED = '_wcof_decided';
     const META_LOCK    = '_wcof_lock';
     const STATUS_AWAITING = 'wc-awaiting-approval';
@@ -47,11 +48,12 @@ final class WCOF_Plugin {
         add_action('add_meta_boxes', [$this,'add_metabox']);
         add_action('admin_post_wcof_approve', [$this,'handle_approve']);
         add_action('admin_post_wcof_reject',  [$this,'handle_reject']);
+        add_action('admin_post_wcof_set_eta', [$this,'handle_set_eta']);
         add_action('admin_post_wcof_out_for_delivery', [$this,'handle_out_for_delivery']);
         add_action('admin_post_wcof_complete', [$this,'handle_complete']);
 
         // Thank you page hero (live)
-        add_action('woocommerce_thankyou', [$this,'thankyou_hero'], 5);
+        add_action('woocommerce_before_thankyou', [$this,'thankyou_hero'], 5);
 
         // Orders board (front)
         add_shortcode('wcof_orders_admin',   [$this,'shortcode_orders_admin']);
@@ -173,17 +175,27 @@ final class WCOF_Plugin {
     public function render_metabox($post){
         $o = wc_get_order($post->ID); if(!$o) return;
         $eta = (int)$o->get_meta(self::META_ETA);
+        $status = 'wc-'.$o->get_status();
         $approve = wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$post->ID),'wcof_approve_'.$post->ID);
         $reject  = wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$post->ID), 'wcof_reject_'.$post->ID);
+        $seteta  = wp_nonce_url(admin_url('admin-post.php?action=wcof_set_eta&order_id='.$post->ID), 'wcof_set_eta_'.$post->ID);
         $outurl  = wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$post->ID), 'wcof_out_for_delivery_'.$post->ID);
         ?>
         <p><label for="wcof_eta"><strong>Tempo di attesa (minuti)</strong></label></p>
         <p><input type="number" min="0" step="1" id="wcof_eta" value="<?php echo esc_attr($eta?:15); ?>" style="width:100%"></p>
+        <?php if($status===self::STATUS_AWAITING): ?>
         <p>
           <a class="button button-primary" href="<?php echo esc_url($approve); ?>" onclick="event.preventDefault();wcofSubmit(this);">Approva</a>
           <a class="button" href="<?php echo esc_url($reject); ?>" style="margin-left:6px" onclick="event.preventDefault();wcofSubmit(this);">Rifiuta</a>
         </p>
+        <?php elseif($status==='wc-processing'): ?>
+        <p>
+          <a class="button button-primary" href="<?php echo esc_url($seteta); ?>" onclick="event.preventDefault();wcofSubmit(this);">Aggiorna ETA</a>
+        </p>
+        <?php endif; ?>
+        <?php if($status!=='wc-out-for-delivery' && $status!=='wc-completed'): ?>
         <p><a class="button button-secondary" href="<?php echo esc_url($outurl); ?>" onclick="return confirm('Segnare come In consegna?');">Rider in consegna</a></p>
+        <?php endif; ?>
         <script>
           function wcofSubmit(el){
             var f=document.createElement('form'); f.method='POST'; f.action=el.getAttribute('href');
@@ -200,7 +212,9 @@ final class WCOF_Plugin {
         $o = wc_get_order($order_id);
         if($o){
             $eta = isset($_POST['eta']) ? absint($_POST['eta']) : 0;
+            $arrival = current_time('timestamp') + $eta * 60;
             $o->update_meta_data(self::META_ETA, $eta);
+            $o->update_meta_data(self::META_ARRIVAL, $arrival);
             $o->update_meta_data(self::META_DECIDED, 1);
             $o->save();
             $prev = $o->get_status();
@@ -219,6 +233,21 @@ final class WCOF_Plugin {
             $o->update_status(str_replace('wc-','', self::STATUS_REJECTED),'Ordine rifiutato dall’amministratore.');
             $o->update_meta_data(self::META_DECIDED,1);
             $o->save();
+        }
+        wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url('post.php?post='.$order_id.'&action=edit')); exit;
+    }
+    public function handle_set_eta(){
+        if(!current_user_can('manage_woocommerce')) wp_die('Non autorizzato');
+        $order_id = absint($_GET['order_id']??0);
+        check_admin_referer('wcof_set_eta_'.$order_id);
+        $o = wc_get_order($order_id);
+        if($o && $o->has_status([ str_replace('wc-','', self::STATUS_AWAITING), 'processing' ])){
+            $eta = isset($_POST['eta']) ? absint($_POST['eta']) : 0;
+            $arrival = current_time('timestamp') + $eta * 60;
+            $o->update_meta_data(self::META_ETA, $eta);
+            $o->update_meta_data(self::META_ARRIVAL, $arrival);
+            $o->save();
+            $o->add_order_note(sprintf('ETA aggiornata a %d minuti.', $eta));
         }
         wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url('post.php?post='.$order_id.'&action=edit')); exit;
     }
@@ -271,6 +300,8 @@ final class WCOF_Plugin {
                     $id=$o->get_id(); if($id>$latest_id) $latest_id=$id;
                     if($after && $id <= $after) continue;
                     $eta=(int)$o->get_meta(self::META_ETA);
+                    $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
+                    $arrival=$arrival_ts?date_i18n('H:i',$arrival_ts):null;
                     $items=[]; foreach($o->get_items() as $it){ $items[]=['name'=>$it->get_name(),'qty'=>(int)$it->get_quantity()]; }
                     $total_raw = html_entity_decode( wp_strip_all_tags($o->get_formatted_order_total()), ENT_QUOTES, 'UTF-8' );
                     $address = trim(implode(', ', array_filter([
@@ -288,12 +319,13 @@ final class WCOF_Plugin {
                     $out[]=[
                         'id'=>$id,'number'=>$o->get_order_number(),
                         'status'=>'wc-'.$status_slug,'eta'=>$eta,
-                        'arrival'=>$eta ? date_i18n('H:i', current_time('timestamp') + $eta*60) : null,
+                        'arrival'=>$arrival,
                         'total'=>$total_raw,
                         'customer'=>trim($o->get_formatted_billing_full_name()) ?: $o->get_billing_email(),
                         'items'=>$items,
                         'approve_url'=>wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id),
                         'reject_url' =>wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id),
+                        'set_eta_url'=>wp_nonce_url(admin_url('admin-post.php?action=wcof_set_eta&order_id='.$id),'wcof_set_eta_'.$id),
                         'out_url'   =>wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id),
                         'complete_url'=>wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id),
                         'address'=>$address,
@@ -313,7 +345,10 @@ final class WCOF_Plugin {
                 if(current_user_can('manage_woocommerce') || ($uid && $owner===$uid)) $ok=true;
                 else { $k=isset($_GET['k'])?sanitize_text_field($_GET['k']):''; if($k && hash_equals($o->get_order_key(),$k)) $ok=true; }
                 if(!$ok) return new WP_Error('forbidden','Non autorizzato',['status'=>403]);
-                return ['status'=>'wc-'.$o->get_status(),'eta'=>(int)$o->get_meta(self::META_ETA)];
+                $eta=(int)$o->get_meta(self::META_ETA);
+                $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
+                $arrival=$arrival_ts?date_i18n('H:i',$arrival_ts):null;
+                return ['status'=>'wc-'.$o->get_status(),'eta'=>$eta,'arrival'=>$arrival];
             }
         ]);
     }
@@ -364,19 +399,17 @@ final class WCOF_Plugin {
             var orderId=<?php echo (int)$order_id; ?>, k='<?php echo esc_js($key); ?>';
             var tries=0, bar=document.getElementById('wcof-bar');
             function setBar(p){ if(bar){ bar.style.width = Math.max(12, Math.min(100, p)) + '%'; } }
-            function showConfirmed(eta){
+            function showConfirmed(eta, arrival){
               var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
               if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='block'; ic.style.animation='wcof-pop .5s ease-out';}
-              var dt=new Date(Date.now()+ (parseInt(eta||0)*60000)); var hh=('0'+dt.getHours()).slice(-2); var mm=('0'+dt.getMinutes()).slice(-2);
-              if(t){ t.innerHTML='<strong>Pedido confirmado.</strong> En preparación. <span class="wcof-chip">Llegada aprox. '+hh+':'+mm+'</span>'; }
+              if(t){ t.innerHTML='<strong>Pedido confirmado.</strong> En preparación. <span class="wcof-chip">Llegada aprox. '+arrival+'</span>'; }
               if(s){ s.textContent='Tiempo estimado: '+(eta||'?')+' min'; }
               setBar(60);
             }
-            function showOut(eta){
+            function showOut(arrival){
               var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
               if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='block';}
-              var dt=new Date(Date.now()+ (parseInt(eta||0)*60000)); var hh=('0'+dt.getHours()).slice(-2); var mm=('0'+dt.getMinutes()).slice(-2);
-              if(t){ t.innerHTML='<strong>Rider en camino.</strong> <span class="wcof-chip">Llegada '+hh+':'+mm+'</span>'; }
+              if(t){ t.innerHTML='<strong>Rider en camino.</strong> <span class="wcof-chip">Llegada '+arrival+'</span>'; }
               if(s){ s.textContent='Puedes seguir el estado aquí.'; }
               setBar(90);
             }
@@ -392,8 +425,8 @@ final class WCOF_Plugin {
               fetch(url, {credentials:'include', cache:'no-store'})
                 .then(function(r){ return r.json(); })
                 .then(function(d){
-                  if(d && d.status === 'wc-processing'){ showConfirmed(d.eta); setTimeout(check, 5000); }
-                  else if(d && d.status === 'wc-out-for-delivery'){ showOut(d.eta); setTimeout(check, 8000); }
+                  if(d && d.status === 'wc-processing'){ showConfirmed(d.eta, d.arrival); setTimeout(check, 5000); }
+                  else if(d && d.status === 'wc-out-for-delivery'){ showOut(d.arrival); setTimeout(check, 8000); }
                   else if(d && d.status === 'wc-rejected'){ showRejected(); }
                   else { if(tries < 240){ tries++; setTimeout(check, 4500); } }
                 }).catch(function(){ setTimeout(check, 6000); });
@@ -458,7 +491,8 @@ final class WCOF_Plugin {
         <?php foreach($orders as $o): if(!$o instanceof WC_Order){ $o=wc_get_order($o); if(!$o) continue; }
             $id=$o->get_id(); if($id>$last_id)$last_id=$id; $status='wc-'.$o->get_status();
             $eta=(int)$o->get_meta(self::META_ETA);
-            $arrival=$eta?date_i18n('H:i', current_time('timestamp')+$eta*60):null;
+            $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
+            $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
             $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':'st-rej')); ?>
           <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>">
             <div class="wcof-head">
@@ -475,6 +509,8 @@ final class WCOF_Plugin {
                   <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id) ); ?>">Approva</button>
                   <button class="btn btn-reject" data-action="reject" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id) ); ?>">Rifiuta</button>
                 <?php elseif($status==='wc-processing'): ?>
+                  <input type="number" min="0" step="1" placeholder="ETA min" value="<?php echo esc_attr($eta); ?>" class="wcof-eta">
+                  <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_set_eta&order_id='.$id),'wcof_set_eta_'.$id) ); ?>">Aggiorna ETA</button>
                   <a class="btn btn-out" data-action="out" data-complete-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">In Consegna</a>
                 <?php elseif($status===self::STATUS_OUT_FOR_DELIVERY): ?>
                   <a class="btn btn-complete" data-action="complete" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>">Complete</a>
