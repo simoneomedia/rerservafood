@@ -48,6 +48,7 @@ final class WCOF_Plugin {
         add_filter('wcpay_should_use_manual_capture', [$this,'maybe_defer_wcpay_capture'], 10, 2);
         add_filter('woocommerce_paypal_payments_order_intent', [$this,'maybe_defer_paypal_capture'], 10, 2);
         add_filter('woocommerce_paypal_args', [$this,'maybe_defer_paypal_capture'], 10, 2);
+        add_filter('woocommerce_payment_gateways', [$this,'register_gateway']);
 
         // Metabox + admin actions
         add_action('add_meta_boxes', [$this,'add_metabox']);
@@ -200,6 +201,14 @@ final class WCOF_Plugin {
         return 'AUTHORIZE';
     }
 
+    public function register_gateway($methods){
+        if(!class_exists('WCOF_Stripe_Gateway')){
+            require_once __DIR__.'/class-wcof-stripe-gateway.php';
+        }
+        $methods[] = 'WCOF_Stripe_Gateway';
+        return $methods;
+    }
+
     /* ===== Metabox ===== */
     public function add_metabox(){
         add_meta_box('wcof_metabox','Stato ordine (app style)',[$this,'render_metabox'],'shop_order','side','high');
@@ -254,13 +263,31 @@ final class WCOF_Plugin {
             if(!$o->is_paid()){
                 if(0 === strpos($pm, 'stripe')){
                     $intent = $o->get_meta('_stripe_intent_id');
-                    if($intent && class_exists('WC_Stripe_API')){
-                        try{
-                            $res = \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/capture');
-                            $charge_id = $res['charges']['data'][0]['id'] ?? $intent;
-                            $o->payment_complete($charge_id);
-                        }catch(\Exception $e){
-                            $o->add_order_note('Stripe capture failed: '.$e->getMessage());
+                    if($intent){
+                        if(class_exists('WC_Stripe_API')){
+                            try{
+                                $res = \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/capture');
+                                $charge_id = $res['charges']['data'][0]['id'] ?? $intent;
+                                $o->payment_complete($charge_id);
+                            }catch(\Exception $e){
+                                $o->add_order_note('Stripe capture failed: '.$e->getMessage());
+                            }
+                        }else{
+                            $set = get_option(self::OPTION_KEY, []);
+                            $sk = $set['stripe_sk'] ?? '';
+                            if($sk){
+                                $resp = wp_remote_post('https://api.stripe.com/v1/payment_intents/'.$intent.'/capture',[
+                                    'method'=>'POST',
+                                    'headers'=>['Authorization'=>'Bearer '.$sk],
+                                ]);
+                                $body = json_decode(wp_remote_retrieve_body($resp), true);
+                                if(empty($body['error'])){
+                                    $charge_id = $body['charges']['data'][0]['id'] ?? $intent;
+                                    $o->payment_complete($charge_id);
+                                }else{
+                                    $o->add_order_note('Stripe capture failed: '.$body['error']['message']);
+                                }
+                            }
                         }
                     }
                 } else {
@@ -298,11 +325,26 @@ final class WCOF_Plugin {
             $pm = $o->get_payment_method();
             if(0 === strpos($pm, 'stripe')){
                 $intent = $o->get_meta('_stripe_intent_id');
-                if($intent && class_exists('WC_Stripe_API')){
-                    try{
-                        \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/cancel');
-                    }catch(\Exception $e){
-                        $o->add_order_note('Stripe cancel failed: '.$e->getMessage());
+                if($intent){
+                    if(class_exists('WC_Stripe_API')){
+                        try{
+                            \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/cancel');
+                        }catch(\Exception $e){
+                            $o->add_order_note('Stripe cancel failed: '.$e->getMessage());
+                        }
+                    }else{
+                        $set = get_option(self::OPTION_KEY, []);
+                        $sk = $set['stripe_sk'] ?? '';
+                        if($sk){
+                            $resp = wp_remote_post('https://api.stripe.com/v1/payment_intents/'.$intent.'/cancel',[
+                                'method'=>'POST',
+                                'headers'=>['Authorization'=>'Bearer '.$sk],
+                            ]);
+                            $body = json_decode(wp_remote_retrieve_body($resp), true);
+                            if(!empty($body['error'])){
+                                $o->add_order_note('Stripe cancel failed: '.$body['error']['message']);
+                            }
+                        }
                     }
                 }
             } else {
@@ -725,6 +767,9 @@ final class WCOF_Plugin {
             <p><label>Opening time <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Store closed</label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> Riders can see processing</label></p>
+            <h2>Stripe</h2>
+            <p><label>Publishable key<br/><input type="text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_pk]" value="<?php echo esc_attr($s['stripe_pk']); ?>"/></label></p>
+            <p><label>Secret key<br/><input type="text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_sk]" value="<?php echo esc_attr($s['stripe_sk']); ?>"/></label></p>
             <p><button type="submit">Save settings</button></p>
           </form>
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -790,6 +835,8 @@ final class WCOF_Plugin {
             'close_time'=>isset($v['close_time'])?sanitize_text_field($v['close_time']):'',
             'store_closed'=>!empty($v['store_closed'])?1:0,
             'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0,
+            'stripe_pk'=>isset($v['stripe_pk'])?sanitize_text_field($v['stripe_pk']):'',
+            'stripe_sk'=>isset($v['stripe_sk'])?sanitize_text_field($v['stripe_sk']):'',
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
@@ -803,7 +850,8 @@ final class WCOF_Plugin {
         return wp_parse_args($d,[
             'enable'=>0,'app_id'=>'','rest_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
-            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1
+            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
+            'stripe_pk'=>'','stripe_sk'=>''
         ]);
     }
     public function settings_page(){
@@ -823,6 +871,11 @@ final class WCOF_Plugin {
               <tr><th scope="row">Opening time</th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
               <tr><th scope="row">Store closed</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Yes</label></td></tr>
               <tr><th scope="row">Riders see processing</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> Yes</label></td></tr>
+            </table>
+            <h2>Stripe</h2>
+            <table class="form-table" role="presentation">
+              <tr><th scope="row">Publishable key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_pk]" value="<?php echo esc_attr($s['stripe_pk']); ?>"/></td></tr>
+              <tr><th scope="row">Secret key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_sk]" value="<?php echo esc_attr($s['stripe_sk']); ?>"/></td></tr>
             </table>
             <h2>OneSignal</h2>
             <table class="form-table" role="presentation">
