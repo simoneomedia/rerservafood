@@ -236,7 +236,8 @@ final class WCOF_Plugin {
             $o->update_meta_data(self::META_DECIDED, 1);
             $o->save();
             $prev = $o->get_status();
-            if('stripe' === $o->get_payment_method() && !$o->is_paid()){
+            $pm = $o->get_payment_method();
+            if(0 === strpos($pm, 'stripe') && !$o->is_paid()){
                 $charge_id = $o->get_transaction_id();
                 if($charge_id && class_exists('WC_Stripe_API')){
                     try{
@@ -259,7 +260,8 @@ final class WCOF_Plugin {
         check_admin_referer('wcof_reject_'.$order_id);
         $o = wc_get_order($order_id);
         if($o){
-            if('stripe' === $o->get_payment_method() && !$o->is_paid()){
+            $pm = $o->get_payment_method();
+            if(0 === strpos($pm, 'stripe')){
                 $intent = $o->get_meta('_stripe_intent_id');
                 if($intent && class_exists('WC_Stripe_API')){
                     try{
