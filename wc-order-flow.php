@@ -186,8 +186,9 @@ final class WCOF_Plugin {
     }
 
     public function maybe_defer_wcpay_capture($manual, $order){
-        if(!$order instanceof WC_Order || !$order->get_meta(self::META_DECIDED)) return true;
-        return $manual;
+        if(!$order instanceof WC_Order) return $manual;
+        if($order->get_meta(self::META_DECIDED)) return $manual;
+        return true;
     }
 
     public function maybe_defer_paypal_capture($arg, $order){
