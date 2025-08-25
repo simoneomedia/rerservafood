@@ -24,6 +24,7 @@
       root.innerHTML='';
       const addCat = document.createElement('button');
       addCat.textContent = '+ Category';
+      addCat.className = 'btn btn-add';
       addCat.addEventListener('click', addCategory);
       root.appendChild(addCat);
       cats.forEach(function(cat){
@@ -31,9 +32,12 @@
         catDiv.className='wcof-cat';
         const head = document.createElement('div');
         head.className='wcof-cat-header';
-        head.textContent = cat.name;
+        const title = document.createElement('span');
+        title.textContent = cat.name;
+        head.appendChild(title);
         const delBtn = document.createElement('button');
         delBtn.textContent='Delete';
+        delBtn.className='btn btn-del';
         delBtn.addEventListener('click', function(){ deleteCategory(cat.id, cat.count); });
         head.appendChild(delBtn);
         catDiv.appendChild(head);
@@ -44,6 +48,7 @@
         });
         const addProd = document.createElement('button');
         addProd.textContent='+ Product';
+        addProd.className='btn btn-add';
         addProd.addEventListener('click', function(){ openForm(null, cat.id); });
         list.appendChild(addProd);
         catDiv.appendChild(list);
@@ -67,26 +72,36 @@
   function productCard(p){
     const div = document.createElement('div');
     div.className='wcof-prod';
+
     const title = document.createElement('div');
+    title.className='wcof-prod-title';
     title.textContent = p.name + ' - ' + p.price;
-    const toggleLabel = document.createElement('label');
-    toggleLabel.style.display='flex';
-    toggleLabel.style.alignItems='center';
-    toggleLabel.style.gap='4px';
-    const toggle = document.createElement('input');
-    toggle.type='checkbox';
-    toggle.checked = p.status === 'publish';
-    toggle.addEventListener('change', function(){
-      const status = toggle.checked ? 'publish' : 'draft';
+
+    const active = document.createElement('div');
+    active.className='wcof-active';
+    const toggle = document.createElement('label');
+    toggle.className='wcof-switch';
+    const cb = document.createElement('input');
+    cb.type='checkbox';
+    cb.checked = p.status === 'publish';
+    cb.addEventListener('change', function(){
+      const status = cb.checked ? 'publish' : 'draft';
       fetch(apiRoot+'products/'+p.id,{method:'PUT',headers,body:JSON.stringify({status})}).then(render);
     });
-    toggleLabel.appendChild(toggle);
-    toggleLabel.appendChild(document.createTextNode('Active'));
+    const span = document.createElement('span'); span.className='wcof-slider';
+    toggle.appendChild(cb);
+    toggle.appendChild(span);
+    active.appendChild(toggle);
+    const activeTxt = document.createElement('span'); activeTxt.textContent='Active';
+    active.appendChild(activeTxt);
+
     const edit = document.createElement('button');
     edit.textContent='Edit';
+    edit.className='btn btn-edit';
     edit.addEventListener('click', function(){ openForm(p); });
+
     div.appendChild(title);
-    div.appendChild(toggleLabel);
+    div.appendChild(active);
     div.appendChild(edit);
     return div;
   }

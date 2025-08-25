@@ -431,7 +431,7 @@ final class WCOF_Plugin {
           .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end}
           .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:10px;padding:.55rem .6rem}
           .btn{border:none;border-radius:12px;padding:.6rem .9rem;font-weight:700;color:#fff;cursor:pointer}
-          .btn-approve{background:#2563eb} .btn-reject{background:#94a3b8} .btn-complete{background:#10b981}
+          .btn-approve{background:#2563eb} .btn-reject{background:#94a3b8} .btn-out{background:#f59e0b} .btn-complete{background:#10b981}
           .wcof-items{padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
           .wcof-info{margin-top:8px;font-size:14px;color:#334155}
           .wcof-info div{margin-top:4px}
@@ -475,7 +475,7 @@ final class WCOF_Plugin {
                   <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id) ); ?>">Approva</button>
                   <button class="btn btn-reject" data-action="reject" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id) ); ?>">Rifiuta</button>
                 <?php elseif($status==='wc-processing'): ?>
-                  <a class="btn btn-complete" data-action="out" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">In Consegna</a>
+                  <a class="btn btn-out" data-action="out" data-complete-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">In Consegna</a>
                 <?php elseif($status===self::STATUS_OUT_FOR_DELIVERY): ?>
                   <a class="btn btn-complete" data-action="complete" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>">Complete</a>
                 <?php else: ?><em style="color:#94a3b8">—</em><?php endif; ?>
@@ -529,14 +529,27 @@ final class WCOF_Plugin {
         ]);
         ob_start(); ?>
         <style>
-          #wcof-product-manager{font-family:sans-serif;display:flex;flex-direction:column;gap:20px}
-          .wcof-cat{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
-          .wcof-cat-header{display:flex;justify-content:space-between;align-items:center;background:#f1f5f9;padding:10px;font-weight:600}
-          .wcof-prod-list{display:flex;flex-direction:column;gap:8px;padding:10px}
-          .wcof-prod{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px}
+          :root{--wcf-card:#ffffff;--wcf-border:#e5e7eb;--wcf-shadow:0 6px 24px rgba(15,23,42,.06);}
+          #wcof-product-manager{font-family:sans-serif;display:flex;flex-direction:column;gap:18px}
+          .wcof-cat{background:var(--wcf-card);border:1px solid var(--wcf-border);border-radius:18px;box-shadow:var(--wcf-shadow);overflow:hidden}
+          .wcof-cat-header{display:flex;justify-content:space-between;align-items:center;padding:14px;background:#f8fafc;font-weight:700}
+          .wcof-prod-list{display:flex;flex-direction:column;gap:10px;padding:14px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
+          .wcof-prod{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#fff;border:1px solid var(--wcf-border);border-radius:12px;padding:10px}
+          .wcof-prod-title{font-weight:600}
+          .wcof-active{display:flex;align-items:center;gap:6px}
+          .btn{border:none;border-radius:12px;padding:.55rem .9rem;font-weight:700;color:#fff;cursor:pointer}
+          .btn-add{background:#2563eb}
+          .btn-del{background:#ef4444}
+          .btn-edit{background:#10b981}
           .wcof-prod-form{display:flex;flex-direction:column;gap:10px}
           .wcof-prod-form input,.wcof-prod-form textarea,.wcof-prod-form select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px}
           .wcof-prod-form button{padding:10px;background:#111;color:#fff;border:none;border-radius:6px}
+          .wcof-switch{position:relative;display:inline-block;width:40px;height:22px}
+          .wcof-switch input{opacity:0;width:0;height:0}
+          .wcof-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#cbd5e1;transition:.2s;border-radius:22px}
+          .wcof-slider:before{position:absolute;content:"";height:18px;width:18px;left:2px;bottom:2px;background:#fff;transition:.2s;border-radius:50%}
+          .wcof-switch input:checked + .wcof-slider{background:#22c55e}
+          .wcof-switch input:checked + .wcof-slider:before{transform:translateX(18px)}
           @media(min-width:480px){.wcof-prod-form{max-width:420px;margin:0 auto}}
         </style>
         <div id="wcof-product-manager"></div>
