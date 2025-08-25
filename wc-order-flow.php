@@ -18,7 +18,7 @@ final class WCOF_Plugin {
     const META_ARRIVAL = '_wcof_arrival_ts';
     const META_DECIDED = '_wcof_decided';
     const META_LOCK    = '_wcof_lock';
-    const STATUS_AWAITING = 'wc-awaiting-approval';
+    const STATUS_AWAITING = 'wc-on-hold';
     const STATUS_REJECTED = 'wc-rejected';
     const STATUS_OUT_FOR_DELIVERY = 'wc-out-for-delivery';
 
@@ -44,11 +44,9 @@ final class WCOF_Plugin {
         add_filter('woocommerce_payment_complete_order_status', [$this,'force_awaiting_on_payment_complete'], 9999, 3);
         add_action('woocommerce_order_status_changed',    [$this,'undo_auto_approval'], 9999, 4);
         // Prevent automatic capture on supported gateways
-        add_filter('wc_stripe_create_intent_args', [$this,'maybe_defer_stripe_capture'], 10, 2);
         add_filter('wcpay_should_use_manual_capture', [$this,'maybe_defer_wcpay_capture'], 10, 2);
         add_filter('woocommerce_paypal_payments_order_intent', [$this,'maybe_defer_paypal_capture'], 10, 2);
         add_filter('woocommerce_paypal_args', [$this,'maybe_defer_paypal_capture'], 10, 2);
-        add_filter('woocommerce_payment_gateways', [$this,'register_gateway']);
 
         // Metabox + admin actions
         add_action('add_meta_boxes', [$this,'add_metabox']);
@@ -126,13 +124,6 @@ final class WCOF_Plugin {
 
     /* ===== Status registration ===== */
     public function register_statuses(){
-        register_post_status(self::STATUS_AWAITING, [
-            'label' => 'In attesa di approvazione',
-            'public' => true,
-            'show_in_admin_all_list' => true,
-            'show_in_admin_status_list' => true,
-            'label_count' => _n_noop('In attesa di approvazione <span class="count">(%s)</span>','In attesa di approvazione <span class="count">(%s)</span>')
-        ]);
         register_post_status(self::STATUS_REJECTED, [
             'label' => 'Rifiutato',
             'public' => true,
@@ -149,8 +140,13 @@ final class WCOF_Plugin {
         ]);
     }
     public function add_statuses_to_list($s){
-        $n=[]; foreach($s as $k=>$v){ $n[$k]=$v; if($k==='wc-pending'){ $n[self::STATUS_AWAITING]='In attesa di approvazione'; } }
-        $n[self::STATUS_REJECTED]='Rifiutato'; $n[self::STATUS_OUT_FOR_DELIVERY]='In consegna'; return $n;
+        $n=[];
+        foreach($s as $k=>$v){
+            $n[$k] = ($k==='wc-on-hold') ? 'In attesa di approvazione' : $v;
+        }
+        $n[self::STATUS_REJECTED]='Rifiutato';
+        $n[self::STATUS_OUT_FOR_DELIVERY]='In consegna';
+        return $n;
     }
 
     /* ===== Force awaiting approval on creation ===== */
@@ -168,7 +164,7 @@ final class WCOF_Plugin {
     }
     public function force_awaiting_on_payment_complete($status, $order_id, $order){
         if(!$order) $order = wc_get_order($order_id);
-        if($order && !$order->get_meta(self::META_DECIDED)) return 'awaiting-approval';
+        if($order && !$order->get_meta(self::META_DECIDED)) return 'on-hold';
         return $status;
     }
     public function undo_auto_approval($order_id, $old_status, $new_status, $order){
@@ -177,13 +173,6 @@ final class WCOF_Plugin {
         if(in_array($new_status, ['processing','completed'], true)){
             $order->update_status(str_replace('wc-','', self::STATUS_AWAITING),'Forzato: in attesa di approvazione.');
         }
-    }
-
-    public function maybe_defer_stripe_capture($args, $order){
-        if($order instanceof WC_Order && !$order->get_meta(self::META_DECIDED)){
-            $args['capture_method'] = 'manual';
-        }
-        return $args;
     }
 
     public function maybe_defer_wcpay_capture($manual, $order){
@@ -201,13 +190,6 @@ final class WCOF_Plugin {
         return 'AUTHORIZE';
     }
 
-    public function register_gateway($methods){
-        if(!class_exists('WCOF_Stripe_Gateway')){
-            require_once __DIR__.'/class-wcof-stripe-gateway.php';
-        }
-        $methods[] = 'WCOF_Stripe_Gateway';
-        return $methods;
-    }
 
     /* ===== Metabox ===== */
     public function add_metabox(){
@@ -259,54 +241,22 @@ final class WCOF_Plugin {
             $o->update_meta_data(self::META_DECIDED, 1);
             $o->save();
             $prev = $o->get_status();
-            $pm = $o->get_payment_method();
             if(!$o->is_paid()){
-                if(0 === strpos($pm, 'stripe')){
-                    $intent = $o->get_meta('_stripe_intent_id');
-                    if($intent){
-                        if(class_exists('WC_Stripe_API')){
-                            try{
-                                $res = \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/capture');
-                                $charge_id = $res['charges']['data'][0]['id'] ?? $intent;
-                                $o->payment_complete($charge_id);
-                            }catch(\Exception $e){
-                                $o->add_order_note('Stripe capture failed: '.$e->getMessage());
-                            }
-                        }else{
-                            $set = get_option(self::OPTION_KEY, []);
-                            $sk = $set['stripe_sk'] ?? '';
-                            if($sk){
-                                $resp = wp_remote_post('https://api.stripe.com/v1/payment_intents/'.$intent.'/capture',[
-                                    'method'=>'POST',
-                                    'headers'=>['Authorization'=>'Bearer '.$sk],
-                                ]);
-                                $body = json_decode(wp_remote_retrieve_body($resp), true);
-                                if(empty($body['error'])){
-                                    $charge_id = $body['charges']['data'][0]['id'] ?? $intent;
-                                    $o->payment_complete($charge_id);
-                                }else{
-                                    $o->add_order_note('Stripe capture failed: '.$body['error']['message']);
-                                }
-                            }
+                $gateway = function_exists('wc_get_payment_gateway_by_order') ? wc_get_payment_gateway_by_order($o) : null;
+                if($gateway){
+                    try{
+                        if(method_exists($gateway,'capture_charge')){
+                            $gateway->capture_charge($o);
+                            $o->payment_complete($o->get_transaction_id());
+                        }elseif(method_exists($gateway,'capture_payment')){
+                            $gateway->capture_payment($o);
+                            $o->payment_complete($o->get_transaction_id());
+                        }elseif(method_exists($gateway,'process_capture')){
+                            $gateway->process_capture($o);
+                            $o->payment_complete($o->get_transaction_id());
                         }
-                    }
-                } else {
-                    $gateway = function_exists('wc_get_payment_gateway_by_order') ? wc_get_payment_gateway_by_order($o) : null;
-                    if($gateway){
-                        try{
-                            if(method_exists($gateway,'capture_charge')){
-                                $gateway->capture_charge($o);
-                                $o->payment_complete($o->get_transaction_id());
-                            }elseif(method_exists($gateway,'capture_payment')){
-                                $gateway->capture_payment($o);
-                                $o->payment_complete($o->get_transaction_id());
-                            }elseif(method_exists($gateway,'process_capture')){
-                                $gateway->process_capture($o);
-                                $o->payment_complete($o->get_transaction_id());
-                            }
-                        }catch(\Exception $e){
-                            $o->add_order_note($gateway->id.' capture failed: '.$e->getMessage());
-                        }
+                    }catch(\Exception $e){
+                        $o->add_order_note($gateway->id.' capture failed: '.$e->getMessage());
                     }
                 }
             }
@@ -322,51 +272,24 @@ final class WCOF_Plugin {
         check_admin_referer('wcof_reject_'.$order_id);
         $o = wc_get_order($order_id);
         if($o){
-            $pm = $o->get_payment_method();
-            if(0 === strpos($pm, 'stripe')){
-                $intent = $o->get_meta('_stripe_intent_id');
-                if($intent){
-                    if(class_exists('WC_Stripe_API')){
-                        try{
-                            \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/cancel');
-                        }catch(\Exception $e){
-                            $o->add_order_note('Stripe cancel failed: '.$e->getMessage());
-                        }
-                    }else{
-                        $set = get_option(self::OPTION_KEY, []);
-                        $sk = $set['stripe_sk'] ?? '';
-                        if($sk){
-                            $resp = wp_remote_post('https://api.stripe.com/v1/payment_intents/'.$intent.'/cancel',[
-                                'method'=>'POST',
-                                'headers'=>['Authorization'=>'Bearer '.$sk],
-                            ]);
-                            $body = json_decode(wp_remote_retrieve_body($resp), true);
-                            if(!empty($body['error'])){
-                                $o->add_order_note('Stripe cancel failed: '.$body['error']['message']);
-                            }
-                        }
+            $gateway = function_exists('wc_get_payment_gateway_by_order') ? wc_get_payment_gateway_by_order($o) : null;
+            if($gateway){
+                try{
+                    if(method_exists($gateway,'cancel_payment')){
+                        $gateway->cancel_payment($o);
+                    }elseif(method_exists($gateway,'void_payment')){
+                        $gateway->void_payment($o);
+                    }elseif(method_exists($gateway,'cancel_authorization')){
+                        $gateway->cancel_authorization($o);
+                    }elseif(method_exists($gateway,'void_charge')){
+                        $gateway->void_charge($o);
+                    }elseif(method_exists($gateway,'void_transaction')){
+                        $gateway->void_transaction($o);
+                    }elseif(method_exists($gateway,'cancel_charge')){
+                        $gateway->cancel_charge($o);
                     }
-                }
-            } else {
-                $gateway = function_exists('wc_get_payment_gateway_by_order') ? wc_get_payment_gateway_by_order($o) : null;
-                if($gateway){
-                    try{
-                        if(method_exists($gateway,'cancel_payment')){
-                            $gateway->cancel_payment($o);
-                        }elseif(method_exists($gateway,'void_payment')){
-                            $gateway->void_payment($o);
-                        }elseif(method_exists($gateway,'cancel_authorization')){
-                            $gateway->cancel_authorization($o);
-                        }elseif(method_exists($gateway,'void_charge')){
-                            $gateway->void_charge($o);
-                        }elseif(method_exists($gateway,'void_transaction')){
-                            $gateway->void_transaction($o);
-                        }elseif(method_exists($gateway,'cancel_charge')){
-                            $gateway->cancel_charge($o);
-                        }
-                    }catch(\Exception $e){
-                        $o->add_order_note($gateway->id.' cancel failed: '.$e->getMessage());
-                    }
+                }catch(\Exception $e){
+                    $o->add_order_note($gateway->id.' cancel failed: '.$e->getMessage());
                 }
             }
             $o->update_status(str_replace('wc-','', self::STATUS_REJECTED),'Ordine rifiutato dall’amministratore.');
@@ -431,7 +354,7 @@ final class WCOF_Plugin {
             'callback' => function($req){
                 $limit = min(200, max(1, intval($req->get_param('limit') ?: 40)));
                 $after = intval($req->get_param('after_id') ?: 0);
-                $allowed = ['pending','processing','completed','on-hold','cancelled','refunded','failed','awaiting-approval','out-for-delivery','rejected'];
+                $allowed = ['pending','processing','completed','on-hold','cancelled','refunded','failed','out-for-delivery','rejected'];
                 if(!current_user_can('manage_woocommerce')){
                     $set=$this->settings();
                     $allowed = !empty($set['rider_see_processing'])
@@ -567,7 +490,7 @@ final class WCOF_Plugin {
               var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
               if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='none';}
               if(t){ t.innerHTML='<strong>Pedido rechazado.</strong>'; }
-              if(s){ s.textContent='Lo sentimos, contacta con el establecimiento.'; }
+              if(s){ s.textContent='Lo sentimos, pedido rechazado.'; }
               setBar(100);
             }
             function check(){
@@ -577,7 +500,7 @@ final class WCOF_Plugin {
                 .then(function(d){
                   if(d && d.status === 'wc-processing'){ showConfirmed(d.eta, d.arrival); setTimeout(check, 5000); }
                   else if(d && d.status === 'wc-out-for-delivery'){ showOut(d.arrival); setTimeout(check, 8000); }
-                  else if(d && d.status === 'wc-rejected'){ showRejected(); }
+                  else if(d && (d.status === 'wc-rejected' || d.status === 'wc-cancelled')){ showRejected(); }
                   else { if(tries < 240){ tries++; setTimeout(check, 4500); } }
                 }).catch(function(){ setTimeout(check, 6000); });
             }
@@ -767,9 +690,6 @@ final class WCOF_Plugin {
             <p><label>Opening time <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Store closed</label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> Riders can see processing</label></p>
-            <h2>Stripe</h2>
-            <p><label>Publishable key<br/><input type="text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_pk]" value="<?php echo esc_attr($s['stripe_pk']); ?>"/></label></p>
-            <p><label>Secret key<br/><input type="text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_sk]" value="<?php echo esc_attr($s['stripe_sk']); ?>"/></label></p>
             <p><button type="submit">Save settings</button></p>
           </form>
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -834,9 +754,7 @@ final class WCOF_Plugin {
             'open_time'=>isset($v['open_time'])?sanitize_text_field($v['open_time']):'',
             'close_time'=>isset($v['close_time'])?sanitize_text_field($v['close_time']):'',
             'store_closed'=>!empty($v['store_closed'])?1:0,
-            'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0,
-            'stripe_pk'=>isset($v['stripe_pk'])?sanitize_text_field($v['stripe_pk']):'',
-            'stripe_sk'=>isset($v['stripe_sk'])?sanitize_text_field($v['stripe_sk']):'',
+            'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
@@ -850,8 +768,7 @@ final class WCOF_Plugin {
         return wp_parse_args($d,[
             'enable'=>0,'app_id'=>'','rest_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
-            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
-            'stripe_pk'=>'','stripe_sk'=>''
+            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1
         ]);
     }
     public function settings_page(){
@@ -871,11 +788,6 @@ final class WCOF_Plugin {
               <tr><th scope="row">Opening time</th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
               <tr><th scope="row">Store closed</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Yes</label></td></tr>
               <tr><th scope="row">Riders see processing</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> Yes</label></td></tr>
-            </table>
-            <h2>Stripe</h2>
-            <table class="form-table" role="presentation">
-              <tr><th scope="row">Publishable key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_pk]" value="<?php echo esc_attr($s['stripe_pk']); ?>"/></td></tr>
-              <tr><th scope="row">Secret key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[stripe_sk]" value="<?php echo esc_attr($s['stripe_sk']); ?>"/></td></tr>
             </table>
             <h2>OneSignal</h2>
             <table class="form-table" role="presentation">
