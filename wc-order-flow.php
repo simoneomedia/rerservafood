@@ -19,7 +19,6 @@ final class WCOF_Plugin {
     const META_DECIDED = '_wcof_decided';
     const META_LOCK    = '_wcof_lock';
     const STATUS_AWAITING = 'wc-on-hold';
-    const STATUS_REJECTED = 'wc-rejected';
     const STATUS_OUT_FOR_DELIVERY = 'wc-out-for-delivery';
 
     public static function activate(){
@@ -124,13 +123,6 @@ final class WCOF_Plugin {
 
     /* ===== Status registration ===== */
     public function register_statuses(){
-        register_post_status(self::STATUS_REJECTED, [
-            'label' => 'Rifiutato',
-            'public' => true,
-            'show_in_admin_all_list' => true,
-            'show_in_admin_status_list' => true,
-            'label_count' => _n_noop('Rifiutato <span class="count">(%s)</span>','Rifiutato <span class="count">(%s)</span>')
-        ]);
         register_post_status(self::STATUS_OUT_FOR_DELIVERY, [
             'label' => 'In consegna',
             'public' => true,
@@ -144,7 +136,7 @@ final class WCOF_Plugin {
         foreach($s as $k=>$v){
             $n[$k] = ($k==='wc-on-hold') ? 'In attesa di approvazione' : $v;
         }
-        $n[self::STATUS_REJECTED]='Rifiutato';
+        $n['wc-cancelled']='Rifiutato';
         $n[self::STATUS_OUT_FOR_DELIVERY]='In consegna';
         return $n;
     }
@@ -292,7 +284,7 @@ final class WCOF_Plugin {
                     $o->add_order_note($gateway->id.' cancel failed: '.$e->getMessage());
                 }
             }
-            $o->update_status(str_replace('wc-','', self::STATUS_REJECTED),'Ordine rifiutato dall’amministratore.');
+            $o->update_status('cancelled','Ordine rifiutato dall’amministratore.');
             $o->update_meta_data(self::META_DECIDED,1);
             $o->save();
         }
@@ -354,7 +346,7 @@ final class WCOF_Plugin {
             'callback' => function($req){
                 $limit = min(200, max(1, intval($req->get_param('limit') ?: 40)));
                 $after = intval($req->get_param('after_id') ?: 0);
-                $allowed = ['pending','processing','completed','on-hold','cancelled','refunded','failed','out-for-delivery','rejected'];
+                $allowed = ['pending','processing','completed','on-hold','cancelled','refunded','failed','out-for-delivery'];
                 if(!current_user_can('manage_woocommerce')){
                     $set=$this->settings();
                     $allowed = !empty($set['rider_see_processing'])
@@ -500,7 +492,7 @@ final class WCOF_Plugin {
                 .then(function(d){
                   if(d && d.status === 'wc-processing'){ showConfirmed(d.eta, d.arrival); setTimeout(check, 5000); }
                   else if(d && d.status === 'wc-out-for-delivery'){ showOut(d.arrival); setTimeout(check, 8000); }
-                  else if(d && (d.status === 'wc-rejected' || d.status === 'wc-cancelled')){ showRejected(); }
+                  else if(d && d.status === 'wc-cancelled'){ showRejected(); }
                   else { if(tries < 240){ tries++; setTimeout(check, 4500); } }
                 }).catch(function(){ setTimeout(check, 6000); });
             }
