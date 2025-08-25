@@ -635,9 +635,18 @@ final class WCOF_Plugin {
     public function maybe_redirect_setup(){
         if( !current_user_can('manage_woocommerce') ) return;
         if( get_option('wcof_setup_done') ) return;
+        global $pagenow;
+        if( $pagenow === 'plugins.php' ) return;
+        if( isset($_GET['action']) && $_GET['action'] === 'deactivate' ) return;
         if( isset($_GET['page']) && $_GET['page']==='wcof-setup' ) return;
-        wp_safe_redirect(admin_url('admin.php?page=wcof-setup'));
-        exit;
+        add_action('admin_notices', [$this,'setup_notice']);
+    }
+
+    public function setup_notice(){
+        $url = esc_url(admin_url('admin.php?page=wcof-setup'));
+        echo '<div class="notice notice-warning"><p>';
+        echo 'Please complete the <a href="'.$url.'">ReeservaFood setup</a>.';
+        echo '</p></div>';
     }
 
     public function setup_page(){
