@@ -15,7 +15,7 @@
   function htmlEscape(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m])); }
   function decodeHtml(s){ if(!s) return s; const t=document.createElement('textarea'); t.innerHTML=s; return t.value.replace(/&amp;/g,'&'); }
   function statusBar(st){
-    return st==='wc-awaiting-approval'
+    return st==='wc-on-hold'
       ? 'st-await'
       : (st==='wc-processing'
           ? 'st-proc'
@@ -24,7 +24,7 @@
               : (st==='wc-completed'?'st-comp':'st-rej')));
   }
   function actionButtons(o){
-    if(o.status==='wc-awaiting-approval'){
+    if(o.status==='wc-on-hold'){
       return `<input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
               <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.approve_url||'')}">Approva</button>
               <button class="btn btn-reject" data-action="reject" data-url="${htmlEscape(o.reject_url||'')}">Rifiuta</button>`;
@@ -48,7 +48,7 @@
     const note = htmlEscape(o.note||'');
     return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
-        <div class="wcof-left ${statusBar(o.status||'wc-awaiting-approval')}"></div>
+        <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}"></div>
         <div class="wcof-meta">
           <p class="wcof-title">#${htmlEscape(o.number||o.id||'')} <span class="wcof-badge">${htmlEscape(o.status||'')}</span></p>
           <p style="color:#475569">${htmlEscape(o.customer||'')}</p>
