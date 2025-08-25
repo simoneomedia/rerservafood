@@ -14,7 +14,15 @@
 
   function htmlEscape(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m])); }
   function decodeHtml(s){ if(!s) return s; const t=document.createElement('textarea'); t.innerHTML=s; return t.value.replace(/&amp;/g,'&'); }
-  function statusBar(st){ return st==='wc-awaiting-approval'?'st-await':(st==='wc-processing'?'st-proc':(st==='wc-out-for-delivery'?'st-out':'st-rej')); }
+  function statusBar(st){
+    return st==='wc-awaiting-approval'
+      ? 'st-await'
+      : (st==='wc-processing'
+          ? 'st-proc'
+          : (st==='wc-out-for-delivery'
+              ? 'st-out'
+              : (st==='wc-completed'?'st-comp':'st-rej')));
+  }
   function actionButtons(o){
     if(o.status==='wc-awaiting-approval'){
       return `<input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
@@ -26,12 +34,15 @@
               <a class="btn btn-out" data-action="out" data-complete-url="${htmlEscape(o.complete_url||'')}" href="${htmlEscape(o.out_url||'')}">In Consegna</a>`;
     } else if(o.status==='wc-out-for-delivery'){
       return `<a class="btn btn-complete" data-action="complete" href="${htmlEscape(o.complete_url||'')}">Complete</a>`;
+    } else if(o.status==='wc-completed'){
+      return `<button class="btn btn-toggle" data-action="toggle">Dettagli</button>`;
     }
     return `<em style="color:#94a3b8">—</em>`;
   }
   function cardHTML(o){
     const items = Array.isArray(o.items)?o.items:[];
     const arrival = o.arrival ? `<span class="wcof-arrival">${htmlEscape(o.arrival)}</span>` : '—';
+    const collapsed = o.status==='wc-completed';
     const address = htmlEscape(o.address||'');
     const phone = htmlEscape(o.phone||'');
     const note = htmlEscape(o.note||'');
@@ -46,7 +57,7 @@
         <div class="wcof-arrival-wrap">${arrival}</div>
         <div class="wcof-actions">${actionButtons(o)}</div>
       </div>
-      <div class="wcof-items" style="padding:12px 16px;background:#f9fafb;border-top:1px dashed #e5e7eb">
+      <div class="wcof-items" style="padding:12px 16px;background:#f9fafb;border-top:1px dashed #e5e7eb;${collapsed?'display:none;':''}">
         ${items.map(it=>`<div class="wcof-item"><span>${htmlEscape(it.name)}</span> <strong>× ${it.qty|0}</strong></div>`).join('')}
         <div class="wcof-info">
           <div><strong>Indirizzo:</strong> ${address}</div>
@@ -124,8 +135,26 @@
       const url = (t.getAttribute('href')||'').replace(/&amp;/g,'&');
       fetch(url, {credentials:'include'}).then(()=>{
         const card = t.closest('.wcof-card');
-        if(card) card.remove();
+        if(card){
+          card.setAttribute('data-status','wc-completed');
+          const left = card.querySelector('.wcof-left');
+          if(left){ left.classList.remove('st-out'); left.classList.add('st-comp'); }
+          const badge = card.querySelector('.wcof-badge');
+          if(badge) badge.textContent = 'wc-completed';
+          const items = card.querySelector('.wcof-items');
+          if(items) items.style.display = 'none';
+          t.textContent = 'Dettagli';
+          t.classList.remove('btn-complete');
+          t.classList.add('btn-toggle');
+          t.dataset.action = 'toggle';
+          t.removeAttribute('href');
+        }
       }).catch(()=>{ window.location.href = url; });
+    }
+    if(t.dataset && t.dataset.action==='toggle'){
+      const card = t.closest('.wcof-card');
+      const items = card?.querySelector('.wcof-items');
+      if(items){ items.style.display = items.style.display==='none'?'block':'none'; }
     }
   });
 })();
