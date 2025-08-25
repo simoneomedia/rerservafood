@@ -514,6 +514,28 @@ final class WCOF_Plugin {
                 : ['out-for-delivery','completed'];
         }
         $orders = wc_get_orders($args);
+        // Sort orders: awaiting first (newest), then processing (oldest first),
+        // then out for delivery and completed
+        usort($orders, function($a,$b){
+            if(!$a instanceof WC_Order) $a = wc_get_order($a);
+            if(!$b instanceof WC_Order) $b = wc_get_order($b);
+            if(!$a || !$b) return 0;
+            $order = [
+                self::STATUS_AWAITING       => 0,
+                'wc-processing'             => 1,
+                self::STATUS_OUT_FOR_DELIVERY => 2,
+                'wc-completed'              => 3,
+            ];
+            $sa = 'wc-'.$a->get_status();
+            $sb = 'wc-'.$b->get_status();
+            $pa = $order[$sa] ?? 99;
+            $pb = $order[$sb] ?? 99;
+            if($pa !== $pb) return $pa <=> $pb;
+            $ida = (int)$a->get_id();
+            $idb = (int)$b->get_id();
+            if($sa === self::STATUS_AWAITING) return $idb <=> $ida; // newest first
+            return $ida <=> $idb; // oldest first
+        });
         $last_id=0;
         ob_start(); ?>
         <style>
