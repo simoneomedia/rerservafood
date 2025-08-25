@@ -3,7 +3,7 @@
  * Plugin Name: Reeservafood
  * Description: App‑style order approvals for WooCommerce with ETA, “Rider on the way”, live order board, and integrated OneSignal Web Push (no extra plugin). Mobile‑first UI.
  * Author: Reeserva
- * Version: 1.9.0
+ * Version: 1.9.1
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * License: GPLv2 or later
@@ -522,7 +522,7 @@ final class WCOF_Plugin {
     /* ===== Product manager (front) ===== */
     public function shortcode_product_manager($atts=[]){
         if(!current_user_can('manage_woocommerce')) return '';
-        wp_enqueue_script('wcof-product-manager', plugins_url('assets/product-manager.js', __FILE__), [], '1.9.0', true);
+        wp_enqueue_script('wcof-product-manager', plugins_url('assets/product-manager.js', __FILE__), [], '1.9.1', true);
         wp_localize_script('wcof-product-manager', 'WCOF_PM', [
             'root'  => esc_url_raw( rest_url('wc/v3/') ),
             'nonce' => wp_create_nonce('wp_rest')
@@ -533,7 +533,7 @@ final class WCOF_Plugin {
           .wcof-cat{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
           .wcof-cat-header{display:flex;justify-content:space-between;align-items:center;background:#f1f5f9;padding:10px;font-weight:600}
           .wcof-prod-list{display:flex;flex-direction:column;gap:8px;padding:10px}
-          .wcof-prod{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px}
+          .wcof-prod{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px}
           .wcof-prod-form{display:flex;flex-direction:column;gap:10px}
           .wcof-prod-form input,.wcof-prod-form textarea,.wcof-prod-form select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px}
           .wcof-prod-form button{padding:10px;background:#111;color:#fff;border:none;border-radius:6px}
