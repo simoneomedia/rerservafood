@@ -61,6 +61,11 @@ final class WCOF_Plugin {
         // Product manager (front)
         add_shortcode('wcof_product_manager', [$this,'shortcode_product_manager']);
 
+        // Store settings + rider management (front)
+        add_shortcode('wcof_store_settings', [$this,'shortcode_store_settings']);
+        add_action('admin_post_wcof_save_store', [$this,'handle_save_store']);
+        add_action('admin_post_wcof_add_rider', [$this,'handle_add_rider']);
+
         // REST
         add_action('rest_api_init', [$this,'register_rest_routes']);
 
@@ -257,6 +262,10 @@ final class WCOF_Plugin {
         check_admin_referer('wcof_out_for_delivery_'.$order_id);
         $o = wc_get_order($order_id);
         if($o){
+            if(current_user_can('wcof_rider')){
+                $set=$this->settings();
+                if(empty($set['rider_see_processing']) && $o->has_status('processing')) wp_die('Non autorizzato');
+            }
             $o->update_status(str_replace('wc-','', self::STATUS_OUT_FOR_DELIVERY),'Rider in consegna.');
             $o->update_meta_data(self::META_DECIDED,1);
             $o->save();
@@ -270,6 +279,10 @@ final class WCOF_Plugin {
         check_admin_referer('wcof_complete_'.$order_id);
         $o = wc_get_order($order_id);
         if($o){
+            if(current_user_can('wcof_rider')){
+                $set=$this->settings();
+                if(empty($set['rider_see_processing']) && $o->has_status('processing')) wp_die('Non autorizzato');
+            }
             $o->update_status('completed','Consegna completata.');
             $o->save();
         }
@@ -286,7 +299,10 @@ final class WCOF_Plugin {
                 $after = intval($req->get_param('after_id') ?: 0);
                 $allowed = ['pending','processing','completed','on-hold','cancelled','refunded','failed','awaiting-approval','out-for-delivery','rejected'];
                 if(!current_user_can('manage_woocommerce')){
-                    $allowed = ['processing','out-for-delivery'];
+                    $set=$this->settings();
+                    $allowed = !empty($set['rider_see_processing'])
+                        ? ['processing','out-for-delivery','completed']
+                        : ['out-for-delivery','completed'];
                 }
                 $orders = wc_get_orders([
                     'limit'=>$limit, 'orderby'=>'date','order'=>'DESC',
@@ -443,7 +459,10 @@ final class WCOF_Plugin {
             return '<div class="wcof-alert">Solo gli amministratori o i rider possono vedere questa pagina.</div>';
         $args=['limit'=>50,'orderby'=>'date','order'=>'DESC','type'=>'shop_order','return'=>'objects'];
         if(!current_user_can('manage_woocommerce')){
-            $args['status']=['processing','out-for-delivery'];
+            $set=$this->settings();
+            $args['status']=!empty($set['rider_see_processing'])
+                ? ['processing','out-for-delivery','completed']
+                : ['out-for-delivery','completed'];
         }
         $orders = wc_get_orders($args);
         $last_id=0;
@@ -457,6 +476,7 @@ final class WCOF_Plugin {
           .st-await{background:linear-gradient(180deg,#93c5fd,#60a5fa)}
           .st-proc {background:linear-gradient(180deg,#86efac,#22c55e)}
           .st-out  {background:linear-gradient(180deg,#fef08a,#f59e0b)}
+          .st-comp {background:linear-gradient(180deg,#a7f3d0,#10b981)}
           .st-rej  {background:linear-gradient(180deg,#fecaca,#ef4444)}
           .wcof-title{margin:0;font-weight:700}
           .wcof-badge{display:inline-block;padding:.25rem .6rem;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#1e293b;font-size:12px;margin-left:6px}
@@ -464,7 +484,7 @@ final class WCOF_Plugin {
           .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end}
           .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:10px;padding:.55rem .6rem}
           .btn{border:none;border-radius:12px;padding:.6rem .9rem;font-weight:700;color:#fff;cursor:pointer}
-          .btn-approve{background:#2563eb} .btn-reject{background:#94a3b8} .btn-out{background:#f59e0b} .btn-complete{background:#10b981}
+          .btn-approve{background:#2563eb} .btn-reject{background:#94a3b8} .btn-out{background:#f59e0b} .btn-complete{background:#10b981} .btn-toggle{background:#6b7280}
           .wcof-items{padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
           .wcof-info{margin-top:8px;font-size:14px;color:#334155}
           .wcof-info div{margin-top:4px}
@@ -493,7 +513,7 @@ final class WCOF_Plugin {
             $eta=(int)$o->get_meta(self::META_ETA);
             $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
             $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
-            $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':'st-rej')); ?>
+            $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej'))); ?>
           <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>">
             <div class="wcof-head">
               <div class="wcof-left <?php echo $bar; ?>"></div>
@@ -514,6 +534,8 @@ final class WCOF_Plugin {
                   <a class="btn btn-out" data-action="out" data-complete-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">In Consegna</a>
                 <?php elseif($status===self::STATUS_OUT_FOR_DELIVERY): ?>
                   <a class="btn btn-complete" data-action="complete" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>">Complete</a>
+                <?php elseif($status==='wc-completed'): ?>
+                  <button class="btn btn-toggle" data-action="toggle">Dettagli</button>
                 <?php else: ?><em style="color:#94a3b8">—</em><?php endif; ?>
               </div>
             </div>
@@ -531,7 +553,7 @@ final class WCOF_Plugin {
                 $phone = $o->get_billing_phone();
                 $note  = $o->get_customer_note();
             ?>
-            <div class="wcof-items">
+            <div class="wcof-items" <?php echo $status==='wc-completed'?'style="display:none"':''; ?>>
               <?php foreach($o->get_items() as $it): ?>
                 <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
               <?php endforeach; ?>
@@ -592,6 +614,68 @@ final class WCOF_Plugin {
         <?php return ob_get_clean();
     }
 
+    /* ===== Store settings + rider management (front) ===== */
+    public function shortcode_store_settings($atts=[]){
+        if(!current_user_can('manage_woocommerce')) return '';
+        $s=$this->settings();
+        ob_start(); ?>
+        <div class="wcof-store-settings">
+          <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-bottom:24px">
+            <?php wp_nonce_field('wcof_save_store'); ?>
+            <input type="hidden" name="action" value="wcof_save_store"/>
+            <h2>Store settings</h2>
+            <p><label>Address<br/><input type="text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></label></p>
+            <p>Opening days:<br/>
+              <?php foreach(['mon'=>'Mon','tue'=>'Tue','wed'=>'Wed','thu'=>'Thu','fri'=>'Fri','sat'=>'Sat','sun'=>'Sun'] as $k=>$lbl): ?>
+                <label style="margin-right:8px"><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_days][]" value="<?php echo esc_attr($k); ?>" <?php checked(in_array($k,$s['open_days'],true)); ?>/> <?php echo esc_html($lbl); ?></label>
+              <?php endforeach; ?>
+            </p>
+            <p><label>Opening time <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></label></p>
+            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Store closed</label></p>
+            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> Riders can see processing</label></p>
+            <p><button type="submit">Save settings</button></p>
+          </form>
+          <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <?php wp_nonce_field('wcof_add_rider'); ?>
+            <input type="hidden" name="action" value="wcof_add_rider"/>
+            <h2>Add rider</h2>
+            <p><input type="text" name="rider_user" placeholder="Username" required/></p>
+            <p><input type="email" name="rider_email" placeholder="Email" required/></p>
+            <p><input type="password" name="rider_pass" placeholder="Password" required/></p>
+            <p><button type="submit">Add rider</button></p>
+          </form>
+        </div>
+        <?php return ob_get_clean();
+    }
+
+    public function handle_save_store(){
+        if(!current_user_can('manage_woocommerce')) wp_die('Non autorizzato');
+        check_admin_referer('wcof_save_store');
+        $current=$this->settings();
+        $input=$_POST[self::OPTION_KEY]??[];
+        $opts=array_merge($current,$this->sanitize_settings($input));
+        update_option(self::OPTION_KEY,$opts);
+        wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url());
+        exit;
+    }
+
+    public function handle_add_rider(){
+        if(!current_user_can('manage_woocommerce')) wp_die('Non autorizzato');
+        check_admin_referer('wcof_add_rider');
+        $user=sanitize_user($_POST['rider_user']??'');
+        $email=sanitize_email($_POST['rider_email']??'');
+        $pass=$_POST['rider_pass']??wp_generate_password(12,true);
+        if($user && $email && !username_exists($user) && !email_exists($email)){
+            $uid=wp_create_user($user,$pass,$email);
+            if(!is_wp_error($uid)){
+                $u=new WP_User($uid);
+                $u->set_role('rider');
+            }
+        }
+        wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url());
+        exit;
+    }
+
     /* ===== Settings page ===== */
     public function admin_menu(){
         add_submenu_page('woocommerce','ReeservaFood','ReeservaFood','manage_woocommerce','wcof-settings',[$this,'settings_page']);
@@ -613,6 +697,7 @@ final class WCOF_Plugin {
             'open_time'=>isset($v['open_time'])?sanitize_text_field($v['open_time']):'',
             'close_time'=>isset($v['close_time'])?sanitize_text_field($v['close_time']):'',
             'store_closed'=>!empty($v['store_closed'])?1:0,
+            'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0,
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
@@ -626,7 +711,7 @@ final class WCOF_Plugin {
         return wp_parse_args($d,[
             'enable'=>0,'app_id'=>'','rest_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
-            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0
+            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1
         ]);
     }
     public function settings_page(){
@@ -645,6 +730,7 @@ final class WCOF_Plugin {
               </td></tr>
               <tr><th scope="row">Opening time</th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
               <tr><th scope="row">Store closed</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Yes</label></td></tr>
+              <tr><th scope="row">Riders see processing</th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> Yes</label></td></tr>
             </table>
             <h2>OneSignal</h2>
             <table class="form-table" role="presentation">
