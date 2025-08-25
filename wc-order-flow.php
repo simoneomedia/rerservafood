@@ -45,6 +45,7 @@ final class WCOF_Plugin {
         add_action('woocommerce_order_status_changed',    [$this,'undo_auto_approval'], 9999, 4);
         // Prevent automatic capture on supported gateways
         add_filter('wc_stripe_capture_charge', [$this,'maybe_defer_stripe_capture'], 10, 2);
+        add_filter('wcpay_should_use_manual_capture', [$this,'maybe_defer_wcpay_capture'], 10, 2);
 
         // Metabox + admin actions
         add_action('add_meta_boxes', [$this,'add_metabox']);
@@ -176,8 +177,13 @@ final class WCOF_Plugin {
     }
 
     public function maybe_defer_stripe_capture($capture, $order){
-        if($order instanceof WC_Order && !$order->get_meta(self::META_DECIDED)) return false;
+        if(!$order instanceof WC_Order || !$order->get_meta(self::META_DECIDED)) return false;
         return $capture;
+    }
+
+    public function maybe_defer_wcpay_capture($manual, $order){
+        if(!$order instanceof WC_Order || !$order->get_meta(self::META_DECIDED)) return true;
+        return $manual;
     }
 
     /* ===== Metabox ===== */
