@@ -43,6 +43,8 @@ final class WCOF_Plugin {
         add_action('woocommerce_new_order',               [$this,'force_awaiting_on_create'], 9999, 1);
         add_filter('woocommerce_payment_complete_order_status', [$this,'force_awaiting_on_payment_complete'], 9999, 3);
         add_action('woocommerce_order_status_changed',    [$this,'undo_auto_approval'], 9999, 4);
+        // Prevent automatic capture on supported gateways
+        add_filter('wc_stripe_capture_charge', [$this,'maybe_defer_stripe_capture'], 10, 2);
 
         // Metabox + admin actions
         add_action('add_meta_boxes', [$this,'add_metabox']);
@@ -173,6 +175,11 @@ final class WCOF_Plugin {
         }
     }
 
+    public function maybe_defer_stripe_capture($capture, $order){
+        if($order instanceof WC_Order && !$order->get_meta(self::META_DECIDED)) return false;
+        return $capture;
+    }
+
     /* ===== Metabox ===== */
     public function add_metabox(){
         add_meta_box('wcof_metabox','Stato ordine (app style)',[$this,'render_metabox'],'shop_order','side','high');
@@ -223,6 +230,17 @@ final class WCOF_Plugin {
             $o->update_meta_data(self::META_DECIDED, 1);
             $o->save();
             $prev = $o->get_status();
+            if('stripe' === $o->get_payment_method() && !$o->is_paid()){
+                $charge_id = $o->get_transaction_id();
+                if($charge_id && class_exists('WC_Stripe_API')){
+                    try{
+                        \WC_Stripe_API::request([], 'charges/'.$charge_id.'/capture');
+                        $o->payment_complete($charge_id);
+                    }catch(\Exception $e){
+                        $o->add_order_note('Stripe capture failed: '.$e->getMessage());
+                    }
+                }
+            }
             $o->update_status('processing', sprintf('Ordine approvato. ETA: %d minuti.',$eta));
             WC()->mailer();
             do_action("woocommerce_order_status_{$prev}_to_processing_notification", $order_id);
@@ -235,6 +253,16 @@ final class WCOF_Plugin {
         check_admin_referer('wcof_reject_'.$order_id);
         $o = wc_get_order($order_id);
         if($o){
+            if('stripe' === $o->get_payment_method() && !$o->is_paid()){
+                $intent = $o->get_meta('_stripe_intent_id');
+                if($intent && class_exists('WC_Stripe_API')){
+                    try{
+                        \WC_Stripe_API::request([], 'payment_intents/'.$intent.'/cancel');
+                    }catch(\Exception $e){
+                        $o->add_order_note('Stripe cancel failed: '.$e->getMessage());
+                    }
+                }
+            }
             $o->update_status(str_replace('wc-','', self::STATUS_REJECTED),'Ordine rifiutato dall’amministratore.');
             $o->update_meta_data(self::META_DECIDED,1);
             $o->save();
