@@ -67,6 +67,25 @@
       </div>
     </div>`;
   }
+  function orderValue(card){
+    const st = card.getAttribute('data-status') || '';
+    const id = parseInt(card.getAttribute('data-id')||'0',10);
+    let g = 99;
+    if(st==='wc-on-hold') g=0;
+    else if(st==='wc-processing') g=1;
+    else if(st==='wc-out-for-delivery') g=2;
+    else if(st==='wc-completed') g=3;
+    return {g,id};
+  }
+  function resort(){
+    const cards = Array.from(root.querySelectorAll('.wcof-card'));
+    cards.sort((a,b)=>{
+      const oa=orderValue(a), ob=orderValue(b);
+      if(oa.g!==ob.g) return oa.g-ob.g;
+      return oa.g===0 ? ob.id-oa.id : oa.id-ob.id;
+    });
+    cards.forEach(c=>root.appendChild(c));
+  }
   function safePrependCard(o){
     try{
       const html = cardHTML(o);
@@ -74,7 +93,8 @@
       const el = tmp.firstElementChild; if(!el) return;
       const id = el.getAttribute('data-id');
       if(id && root.querySelector(`.wcof-card[data-id="${CSS.escape(id)}"]`)) return;
-      root.prepend(el);
+      root.appendChild(el);
+      resort();
       setTimeout(()=>el.classList.remove('wcof-new'), 5000);
     }catch(e){ console.warn('WCOF render error', e); }
   }
@@ -126,6 +146,7 @@
           t.dataset.action = 'complete';
           const cu = t.dataset.completeUrl || '';
           t.setAttribute('href', cu.replace(/&amp;/g,'&'));
+          resort();
         }
       }).catch(()=>{ window.location.href = url; });
     }
@@ -148,6 +169,7 @@
           t.classList.add('btn-toggle');
           t.dataset.action = 'toggle';
           t.removeAttribute('href');
+          resort();
         }
       }).catch(()=>{ window.location.href = url; });
     }
