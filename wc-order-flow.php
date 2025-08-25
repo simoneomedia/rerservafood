@@ -670,16 +670,21 @@ final class WCOF_Plugin {
           .btn-add{background:#2563eb}
           .btn-del{background:#ef4444}
           .btn-edit{background:#10b981}
-          .wcof-prod-form{display:flex;flex-direction:column;gap:10px}
-          .wcof-prod-form input,.wcof-prod-form textarea,.wcof-prod-form select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px}
-          .wcof-prod-form button{padding:10px;background:#111;color:#fff;border:none;border-radius:6px}
+          .wcof-form-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;justify-content:center;align-items:center;padding:20px;z-index:9999}
+          .wcof-prod-form{display:flex;flex-direction:column;gap:14px;background:#fff;padding:24px;border-radius:16px;box-shadow:var(--wcf-shadow);width:100%;max-width:600px}
+          .wcof-prod-form input,.wcof-prod-form textarea,.wcof-prod-form select{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:1rem}
+          .wcof-prod-form textarea{min-height:120px}
+          .wcof-prod-form textarea.wcof-allergens{min-height:80px}
+          .wcof-img-field{text-align:center;display:flex;flex-direction:column;gap:10px}
+          .wcof-img-preview{max-width:100%;border-radius:12px;display:none}
+          .wcof-upload-btn{background:#0ea5e9;color:#fff;border:none;border-radius:8px;padding:.55rem .9rem;font-weight:700;cursor:pointer}
+          .wcof-prod-form button{padding:12px;background:#111;color:#fff;border:none;border-radius:8px;font-size:1rem}
           .wcof-switch{position:relative;display:inline-block;width:40px;height:22px}
           .wcof-switch input{opacity:0;width:0;height:0}
           .wcof-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#cbd5e1;transition:.2s;border-radius:22px}
           .wcof-slider:before{position:absolute;content:"";height:18px;width:18px;left:2px;bottom:2px;background:#fff;transition:.2s;border-radius:50%}
           .wcof-switch input:checked + .wcof-slider{background:#22c55e}
           .wcof-switch input:checked + .wcof-slider:before{transform:translateX(18px)}
-          @media(min-width:480px){.wcof-prod-form{max-width:420px;margin:0 auto}}
         </style>
         <div id="wcof-product-manager"></div>
         <?php return ob_get_clean();

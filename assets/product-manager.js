@@ -5,16 +5,18 @@
   const headers = { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' };
   const root = document.getElementById('wcof-product-manager');
   if(!root) return;
-
-  function escapeHtml(str){
-    return str ? str.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#039;'}[c];}) : '';
-  }
-
   function fetchCategories(){
     return fetch(apiRoot + 'products/categories?per_page=100',{headers}).then(r=>r.json());
   }
   function fetchProducts(){
     return fetch(apiRoot + 'products?per_page=100&status=any',{headers}).then(r=>r.json());
+  }
+
+  function uploadImage(file){
+    const mediaRoot = apiRoot.replace('wc/v3/','wp/v2/');
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    return fetch(mediaRoot + 'media',{method:'POST', headers:{'X-WP-Nonce': nonce}, body: fd}).then(r=>r.json());
   }
 
   function render(){
@@ -107,15 +109,73 @@
   }
 
   function openForm(product, defaultCat){
-    root.innerHTML='';
+    const overlay = document.createElement('div');
+    overlay.className='wcof-form-overlay';
     const form = document.createElement('form');
     form.className='wcof-prod-form';
-    form.innerHTML =
-      '<input type="text" name="name" placeholder="Name" required value="'+(product?escapeHtml(product.name):'')+'"/>'+
-      '<input type="number" name="price" step="0.01" placeholder="Price" required value="'+(product?product.price:'')+'"/>'+
-      '<input type="text" name="image" placeholder="Image URL" value="'+(product&&product.images[0]?product.images[0].src:'')+'"/>'+
-      '<textarea name="description" placeholder="Description">'+(product?escapeHtml(product.description.replace(/<[^>]*>/g,'')):'')+'</textarea>'+
-      '<input type="text" name="allergens" placeholder="Allergens" value="'+(product?(product.meta_data.find(m=>m.key==='_allergens')||{}).value:'')+'"/>';
+
+    const name = document.createElement('input');
+    name.type='text';
+    name.name='name';
+    name.required=true;
+    name.placeholder='Name';
+    name.value = product ? product.name : '';
+    form.appendChild(name);
+
+    const price = document.createElement('input');
+    price.type='number';
+    price.name='price';
+    price.step='0.01';
+    price.required=true;
+    price.placeholder='Price';
+    price.value = product ? product.price : '';
+    form.appendChild(price);
+
+    const imgField = document.createElement('div');
+    imgField.className='wcof-img-field';
+    const imgPreview = document.createElement('img');
+    imgPreview.className='wcof-img-preview';
+    if(product && product.images[0]){
+      imgPreview.src = product.images[0].src;
+      imgPreview.style.display='block';
+    }
+    imgField.appendChild(imgPreview);
+    const fileInput = document.createElement('input');
+    fileInput.type='file';
+    fileInput.accept='image/*';
+    fileInput.style.display='none';
+    const uploadBtn = document.createElement('button');
+    uploadBtn.type='button';
+    uploadBtn.textContent='Upload image';
+    uploadBtn.className='wcof-upload-btn';
+    uploadBtn.addEventListener('click', function(){ fileInput.click(); });
+    fileInput.addEventListener('change', function(){
+      if(fileInput.files[0]){
+        const reader = new FileReader();
+        reader.onload = function(e){
+          imgPreview.src = e.target.result;
+          imgPreview.style.display='block';
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+      }
+    });
+    imgField.appendChild(uploadBtn);
+    imgField.appendChild(fileInput);
+    form.appendChild(imgField);
+
+    const desc = document.createElement('textarea');
+    desc.name='description';
+    desc.placeholder='Description';
+    desc.value = product ? product.description.replace(/<[^>]*>/g,'') : '';
+    form.appendChild(desc);
+
+    const allerg = document.createElement('textarea');
+    allerg.name='allergens';
+    allerg.className='wcof-allergens';
+    allerg.placeholder='Allergens';
+    allerg.value = product ? (product.meta_data.find(m=>m.key==='_allergens')||{}).value : '';
+    form.appendChild(allerg);
+
     const catSel = document.createElement('select');
     catSel.name='category';
     fetchCategories().then(function(cats){
@@ -128,27 +188,51 @@
       });
     });
     form.appendChild(catSel);
-    const save = document.createElement('button'); save.type='submit'; save.textContent='Save';
+
+    const save = document.createElement('button');
+    save.type='submit';
+    save.textContent='Save';
     form.appendChild(save);
-    const cancel = document.createElement('button'); cancel.type='button'; cancel.textContent='Cancel';
-    cancel.addEventListener('click', render);
+
+    const cancel = document.createElement('button');
+    cancel.type='button';
+    cancel.textContent='Cancel';
+    cancel.addEventListener('click', function(){ overlay.remove(); });
     form.appendChild(cancel);
+
     form.addEventListener('submit', function(e){
       e.preventDefault();
-      const data = new FormData(form);
       const body = {
-        name: data.get('name'),
-        regular_price: data.get('price'),
-        description: data.get('description'),
-        categories: [{id: parseInt(data.get('category'),10)}],
-        images: data.get('image') ? [{src:data.get('image')}] : [],
-        meta_data: [{key:'_allergens', value:data.get('allergens')}] 
+        name: name.value,
+        regular_price: price.value,
+        description: desc.value,
+        categories: [{id: parseInt(catSel.value,10)}],
+        images: [],
+        meta_data: [{key:'_allergens', value: allerg.value}]
       };
       const method = product ? 'PUT' : 'POST';
       const url = apiRoot + 'products' + (product?'/'+product.id:'');
-      fetch(url,{method:method,headers:headers,body:JSON.stringify(body)}).then(render);
+      function send(){
+        fetch(url,{method:method,headers:headers,body:JSON.stringify(body)}).then(function(){
+          overlay.remove();
+          render();
+        });
+      }
+      if(fileInput.files[0]){
+        uploadImage(fileInput.files[0]).then(function(img){
+          body.images = [{id: img.id}];
+          send();
+        });
+      } else if(product && product.images[0]){
+        body.images = [{id: product.images[0].id}];
+        send();
+      } else {
+        send();
+      }
     });
-    root.appendChild(form);
+
+    overlay.appendChild(form);
+    document.body.appendChild(overlay);
   }
 
   render();
