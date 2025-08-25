@@ -14,7 +14,7 @@
     return fetch(apiRoot + 'products/categories?per_page=100',{headers}).then(r=>r.json());
   }
   function fetchProducts(){
-    return fetch(apiRoot + 'products?per_page=100',{headers}).then(r=>r.json());
+    return fetch(apiRoot + 'products?per_page=100&status=any',{headers}).then(r=>r.json());
   }
 
   function render(){
@@ -69,10 +69,25 @@
     div.className='wcof-prod';
     const title = document.createElement('div');
     title.textContent = p.name + ' - ' + p.price;
+    const toggleLabel = document.createElement('label');
+    toggleLabel.style.display='flex';
+    toggleLabel.style.alignItems='center';
+    toggleLabel.style.gap='4px';
+    const toggle = document.createElement('input');
+    toggle.type='checkbox';
+    toggle.checked = p.status === 'publish';
+    toggle.addEventListener('change', function(){
+      const status = toggle.checked ? 'publish' : 'draft';
+      fetch(apiRoot+'products/'+p.id,{method:'PUT',headers,body:JSON.stringify({status})}).then(render);
+    });
+    toggleLabel.appendChild(toggle);
+    toggleLabel.appendChild(document.createTextNode('Active'));
     const edit = document.createElement('button');
     edit.textContent='Edit';
     edit.addEventListener('click', function(){ openForm(p); });
-    div.appendChild(title); div.appendChild(edit);
+    div.appendChild(title);
+    div.appendChild(toggleLabel);
+    div.appendChild(edit);
     return div;
   }
 
