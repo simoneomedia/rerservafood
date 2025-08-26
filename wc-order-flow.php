@@ -81,9 +81,13 @@ final class WCOF_Plugin {
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
 
         add_filter('woocommerce_checkout_fields', [$this,'add_delivery_address_field']);
+        add_filter('woocommerce_blocks_checkout_fields', [$this,'block_add_delivery_address_field']);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
         add_action('woocommerce_checkout_update_order_meta', [$this,'save_delivery_address']);
         add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields'], 999);
+        add_action('woocommerce_store_api_checkout_validation', [$this,'store_api_validate_checkout'], 10, 2);
+        add_filter('woocommerce_store_api_checkout_update_order_from_request', [$this,'store_api_save_delivery_address'], 10, 2);
+        add_action('woocommerce_blocks_loaded', [$this,'register_blocks_integration']);
 
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
@@ -856,6 +860,16 @@ final class WCOF_Plugin {
         return $fields;
     }
 
+    public function block_add_delivery_address_field($fields){
+        if(!isset($fields['billing'])) $fields['billing'] = [];
+        $fields['billing']['wcof_delivery_address'] = [
+            'type'     => 'text',
+            'label'    => __('Address','wc-order-flow'),
+            'required' => true,
+        ];
+        return $fields;
+    }
+
     public function hide_billing_fields($fields){
         $base = ['first_name','last_name','company','address_1','address_2','city','postcode','state','country','phone'];
         foreach(['billing','shipping'] as $section){
@@ -889,6 +903,34 @@ final class WCOF_Plugin {
                 update_post_meta($order_id, '_wcof_delivery_address', $addr);
             }
         }
+    }
+
+    public function store_api_validate_checkout($data, $errors){
+        $codes = $this->delivery_postal_codes();
+        $postcode = isset($data['billing_address']['postcode']) ? sanitize_text_field($data['billing_address']['postcode']) : '';
+        $address  = isset($data['billing_address']['wcof_delivery_address']) ? sanitize_text_field($data['billing_address']['wcof_delivery_address']) : '';
+        if($address===''){
+            $errors->add('wcof_delivery_address', __('Please enter a delivery address.','wc-order-flow'));
+        }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
+            $errors->add('wcof_delivery_address', __('The address is outside of our delivery area.','wc-order-flow'));
+        }
+    }
+
+    public function store_api_save_delivery_address($order, $request){
+        $billing = $request->get_param('billing_address');
+        $addr = isset($billing['wcof_delivery_address']) ? sanitize_text_field($billing['wcof_delivery_address']) : '';
+        if($addr !== ''){
+            $order->update_meta_data('_wcof_delivery_address', $addr);
+        }
+        return $order;
+    }
+
+    public function register_blocks_integration(){
+        if( !class_exists('\\Automattic\\WooCommerce\\Blocks\\Package') ) return;
+        $container = \Automattic\WooCommerce\Blocks\Package::container();
+        if( !$container->has( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationRegistry' ) ) return;
+        $registry = $container->get( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationRegistry' );
+        $registry->register( new WCOF_Blocks_Integration( $this ) );
     }
     public function settings_page(){
         $s=$this->settings(); ?>
@@ -1070,6 +1112,42 @@ final class WCOF_Plugin {
         if( empty($this->settings()['enable']) ) return '<em>Enable push in settings first.</em>';
         wp_enqueue_script('wcof-push-debug', plugins_url('assets/push-debug.js', __FILE__), [], '1.9.0', true);
         return '<div id="wcof-push-debug" style="padding:12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc"></div>';
+    }
+}
+
+class WCOF_Blocks_Integration implements \Automattic\WooCommerce\Blocks\Integrations\IntegrationInterface {
+    private $plugin;
+
+    public function __construct( $plugin ) {
+        $this->plugin = $plugin;
+    }
+
+    public function get_name() {
+        return 'wcof-checkout-address';
+    }
+
+    public function initialize() {}
+
+    public function get_script_handles() {
+        wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
+        wp_register_script('wcof-checkout-address', plugins_url('assets/checkout-address.js', __FILE__), ['leaflet'], '1.0', true);
+        return ['wcof-checkout-address'];
+    }
+
+    public function get_editor_script_handles() { return []; }
+
+    public function get_style_handles() {
+        wp_register_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
+        return ['leaflet'];
+    }
+
+    public function get_editor_style_handles() { return []; }
+
+    public function enqueue_assets() {
+        $codes = $this->plugin->delivery_postal_codes();
+        wp_localize_script('wcof-checkout-address', 'wcofCheckoutAddress', [
+            'postalCodes' => $codes,
+        ]);
     }
 }
 register_activation_hook(__FILE__, ['WCOF_Plugin','activate']);
