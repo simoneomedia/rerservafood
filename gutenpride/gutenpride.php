@@ -1,5 +1,14 @@
 <?php
 /**
+ * Plugin Name: Gutenpride
+ * Description: Dependency stub for Reactivate.
+ * Version: 1.0.0
+ * Author: Reeserva
+ * License: GPLv2 or later
+ * Text Domain: gutenpride
+ */
+
+/**
  * Gutenpride dependency stub.
  *
  * This file is bundled with the plugin so that Reactivate can
