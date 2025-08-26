@@ -79,9 +79,10 @@ final class WCOF_Plugin {
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
-        add_action('woocommerce_before_checkout_billing_form', [$this,'render_checkout_address']);
+        add_filter('woocommerce_checkout_fields', [$this,'customize_checkout_fields'], 999);
+        add_action('woocommerce_after_checkout_billing_form', [$this,'render_delivery_map'], 5);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
-        add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields']);
+        add_action('woocommerce_checkout_update_order_meta', [$this,'save_delivery_address']);
 
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
@@ -842,34 +843,48 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function render_checkout_address($checkout){
-        echo '<div id="wcof-delivery-address"><h3>'.esc_html__('Delivery address','wc-order-flow').'</h3>';
-        woocommerce_form_field('wcof_delivery_address', [
-            'type' => 'text',
-            'class' => ['form-row-wide'],
+    public function customize_checkout_fields($fields){
+        $fields['billing']['wcof_delivery_address'] = [
+            'type'     => 'text',
+            'class'    => ['form-row-wide'],
             'required' => true,
-            'label' => __('Address','wc-order-flow')
-        ], $checkout->get_value('wcof_delivery_address'));
-        echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
-        echo '</div>';
-    }
-
-    public function hide_billing_fields($fields){
-        $hide = ['billing_address_1','billing_address_2','billing_city','billing_postcode','billing_state','billing_country'];
-        foreach($hide as $key){
-            if(isset($fields['billing'][$key])){
-                $fields['billing'][$key]['type'] = 'hidden';
-                $fields['billing'][$key]['label'] = '';
-                $fields['billing'][$key]['required'] = false;
+            'label'    => __('Delivery address','wc-order-flow'),
+            'priority' => 10,
+        ];
+        $base = ['first_name','last_name','company','address_1','address_2','city','postcode','state','country','phone'];
+        foreach(['billing','shipping'] as $section){
+            foreach($base as $part){
+                $key = $section . '_' . $part;
+                if(isset($fields[$section][$key])){
+                    $fields[$section][$key]['type'] = 'hidden';
+                    $fields[$section][$key]['label'] = '';
+                    $fields[$section][$key]['required'] = false;
+                }
             }
         }
         return $fields;
     }
+
+    public function render_delivery_map(){
+        echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
+    }
     public function validate_checkout_address(){
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
-        if( !empty($codes) && !in_array($postcode, $codes, true) ){
+        $address  = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
+        if($address===''){
+            wc_add_notice(__('Please enter a delivery address.','wc-order-flow'), 'error');
+        }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
             wc_add_notice(__('The address is outside of our delivery area.','wc-order-flow'), 'error');
+        }
+    }
+
+    public function save_delivery_address($order_id){
+        if(isset($_POST['wcof_delivery_address'])){
+            $addr = sanitize_text_field($_POST['wcof_delivery_address']);
+            if($addr !== ''){
+                update_post_meta($order_id, '_wcof_delivery_address', $addr);
+            }
         }
     }
     public function settings_page(){
