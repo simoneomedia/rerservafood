@@ -79,9 +79,10 @@ final class WCOF_Plugin {
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
-        add_action('woocommerce_before_checkout_billing_form', [$this,'render_checkout_address']);
+        add_action('woocommerce_checkout_before_customer_details', [$this,'render_checkout_address'], 5);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
-        add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields']);
+        add_action('woocommerce_checkout_update_order_meta', [$this,'save_delivery_address']);
+        add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields'], 999);
 
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
@@ -855,12 +856,15 @@ final class WCOF_Plugin {
     }
 
     public function hide_billing_fields($fields){
-        $hide = ['billing_address_1','billing_address_2','billing_city','billing_postcode','billing_state','billing_country'];
-        foreach($hide as $key){
-            if(isset($fields['billing'][$key])){
-                $fields['billing'][$key]['type'] = 'hidden';
-                $fields['billing'][$key]['label'] = '';
-                $fields['billing'][$key]['required'] = false;
+        $base = ['first_name','last_name','company','address_1','address_2','city','postcode','state','country','phone'];
+        foreach(['billing','shipping'] as $section){
+            foreach($base as $part){
+                $key = $section . '_' . $part;
+                if(isset($fields[$section][$key])){
+                    $fields[$section][$key]['type'] = 'hidden';
+                    $fields[$section][$key]['label'] = '';
+                    $fields[$section][$key]['required'] = false;
+                }
             }
         }
         return $fields;
@@ -868,8 +872,20 @@ final class WCOF_Plugin {
     public function validate_checkout_address(){
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
-        if( !empty($codes) && !in_array($postcode, $codes, true) ){
+        $address  = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
+        if($address===''){
+            wc_add_notice(__('Please enter a delivery address.','wc-order-flow'), 'error');
+        }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
             wc_add_notice(__('The address is outside of our delivery area.','wc-order-flow'), 'error');
+        }
+    }
+
+    public function save_delivery_address($order_id){
+        if(isset($_POST['wcof_delivery_address'])){
+            $addr = sanitize_text_field($_POST['wcof_delivery_address']);
+            if($addr !== ''){
+                update_post_meta($order_id, '_wcof_delivery_address', $addr);
+            }
         }
     }
     public function settings_page(){
