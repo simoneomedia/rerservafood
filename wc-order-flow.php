@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Reeservafood
- * Description: App‑style order approvals for WooCommerce with ETA, “Rider on the way”, live order board, and integrated OneSignal Web Push (no extra plugin). Mobile‑first UI.
+ * Description: App-style order approvals for WooCommerce with ETA, "Rider on the way", live order board, and integrated OneSignal Web Push (no extra plugin). Mobile-first UI.
  * Author: Reeserva
  * Version: 1.9.1
  * Requires at least: 5.8
