@@ -554,7 +554,7 @@ final class WCOF_Plugin {
           .wcof-wrap{display:flex;flex-direction:column;gap:18px}
           .wcof-card{background:var(--wcf-card);border:1px solid var(--wcf-border);border-radius:18px;box-shadow:var(--wcf-shadow);overflow:hidden}
           .wcof-head{display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px}
-          .wcof-left{grid-column:1/2;width:6px;height:100%;border-radius:6px}
+          .wcof-left{grid-column:1/2;width:6px;height:100%;border-radius:6px;grid-row:1/span 3}
           .st-await{background:linear-gradient(180deg,#fef08a,#facc15)}
           .st-proc {background:linear-gradient(180deg,#fed7aa,#fb923c)}
           .st-out  {background:linear-gradient(180deg,#bfdbfe,#60a5fa)}
@@ -563,7 +563,8 @@ final class WCOF_Plugin {
           .wcof-title{margin:0;font-weight:600}
           .wcof-badge{display:inline-block;padding:.25rem .6rem;border-radius:8px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e293b;font-size:12px;margin-left:6px;font-weight:500}
           .wcof-arrival{display:inline-block;padding:.35rem .6rem;border-radius:8px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-weight:600}
-          .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end}
+          .wcof-items{grid-column:2/6;padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
+          .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end;grid-column:2/6}
           .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:8px;padding:.5rem .55rem;font-size:14px}
           .btn{border:none;border-radius:8px;padding:.5rem .85rem;font-weight:600;font-size:14px;color:#fff;cursor:pointer;transition:background .2s}
           .btn-approve{background:#3b82f6} .btn-approve:hover{background:#2563eb}
@@ -571,7 +572,6 @@ final class WCOF_Plugin {
           .btn-out{background:#f59e0b} .btn-out:hover{background:#d97706}
           .btn-complete{background:#10b981} .btn-complete:hover{background:#059669}
           .btn-toggle{background:#6b7280} .btn-toggle:hover{background:#4b5563}
-          .wcof-items{padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
           .wcof-info{margin-top:8px;font-size:14px;color:#334155}
           .wcof-info div{margin-top:4px}
           .wcof-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ececec}
@@ -600,7 +600,20 @@ final class WCOF_Plugin {
             $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
             $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
             $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej')));
-            $status_name = $this->status_name($status); ?>
+            $status_name = $this->status_name($status);
+            $address = trim(implode(', ', array_filter([
+                $o->get_shipping_address_1(), $o->get_shipping_address_2(),
+                trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
+            ])));
+            if(!$address){
+                $address = trim(implode(', ', array_filter([
+                    $o->get_billing_address_1(), $o->get_billing_address_2(),
+                    trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                ])));
+            }
+            $phone = $o->get_billing_phone();
+            $note  = $o->get_customer_note();
+        ?>
           <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>">
             <div class="wcof-head">
               <div class="wcof-left <?php echo $bar; ?>"></div>
@@ -610,6 +623,16 @@ final class WCOF_Plugin {
               </div>
               <div class="wcof-total"><strong><?php echo wp_kses_post($o->get_formatted_order_total()); ?></strong></div>
               <div class="wcof-arrival-wrap"><?php echo $arrival?'<span class="wcof-arrival">'.$arrival.'</span>':'—'; ?></div>
+              <div class="wcof-items" <?php echo $status==='wc-completed'?'style="display:none"':''; ?>>
+              <?php foreach($o->get_items() as $it): ?>
+                <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
+              <?php endforeach; ?>
+              <div class="wcof-info">
+                <div><strong>Indirizzo:</strong> <?php echo esc_html($address); ?></div>
+                <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?></div>
+                <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
+              </div>
+              </div>
               <div class="wcof-actions">
                 <?php if($status===self::STATUS_AWAITING): ?>
                   <input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
@@ -624,30 +647,6 @@ final class WCOF_Plugin {
                 <?php elseif($status==='wc-completed'): ?>
                   <button class="btn btn-toggle" data-action="toggle">Dettagli</button>
                 <?php else: ?><em style="color:#94a3b8">—</em><?php endif; ?>
-              </div>
-            </div>
-            <?php
-                $address = trim(implode(', ', array_filter([
-                    $o->get_shipping_address_1(), $o->get_shipping_address_2(),
-                    trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
-                ])));
-                if(!$address){
-                    $address = trim(implode(', ', array_filter([
-                        $o->get_billing_address_1(), $o->get_billing_address_2(),
-                        trim($o->get_billing_postcode().' '.$o->get_billing_city())
-                    ])));
-                }
-                $phone = $o->get_billing_phone();
-                $note  = $o->get_customer_note();
-            ?>
-            <div class="wcof-items" <?php echo $status==='wc-completed'?'style="display:none"':''; ?>>
-              <?php foreach($o->get_items() as $it): ?>
-                <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
-              <?php endforeach; ?>
-              <div class="wcof-info">
-                <div><strong>Indirizzo:</strong> <?php echo esc_html($address); ?></div>
-                <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?></div>
-                <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
               </div>
             </div>
           </div>
