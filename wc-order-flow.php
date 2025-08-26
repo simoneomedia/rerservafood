@@ -83,6 +83,7 @@ final class WCOF_Plugin {
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
         add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields']);
 
+
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
         add_action('woocommerce_order_status_processing',           [$this,'push_approved'], 20);
         add_action('woocommerce_order_status_out-for-delivery',     [$this,'push_out_for_delivery'], 20);
@@ -864,7 +865,6 @@ final class WCOF_Plugin {
         }
         return $fields;
     }
-
     public function validate_checkout_address(){
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
