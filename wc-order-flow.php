@@ -79,6 +79,7 @@ final class WCOF_Plugin {
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
+
         add_action('woocommerce_checkout_before_customer_details', [$this,'render_checkout_address'], 5);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
         add_action('woocommerce_checkout_update_order_meta', [$this,'save_delivery_address']);
@@ -843,12 +844,12 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function render_checkout_address($checkout){
-        echo '<div id="wcof-delivery-address"><h3>'.esc_html__('Delivery address','wc-order-flow').'</h3>';
-        woocommerce_form_field('wcof_delivery_address', [
-            'type' => 'text',
-            'class' => ['form-row-wide'],
+    public function customize_checkout_fields($fields){
+        $fields['billing']['wcof_delivery_address'] = [
+            'type'     => 'text',
+            'class'    => ['form-row-wide'],
             'required' => true,
+
             'label' => __('Address','wc-order-flow')
         ], $checkout->get_value('wcof_delivery_address'));
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
@@ -868,6 +869,10 @@ final class WCOF_Plugin {
             }
         }
         return $fields;
+    }
+
+    public function render_delivery_map(){
+        echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
     }
     public function validate_checkout_address(){
         $codes = $this->delivery_postal_codes();
