@@ -80,7 +80,7 @@ final class WCOF_Plugin {
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
 
-        add_action('woocommerce_checkout_before_customer_details', [$this,'render_checkout_address'], 5);
+        add_filter('woocommerce_checkout_fields', [$this,'add_delivery_address_field']);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
         add_action('woocommerce_checkout_update_order_meta', [$this,'save_delivery_address']);
         add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields'], 999);
@@ -844,17 +844,16 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function render_checkout_address(){
-        $checkout = WC()->checkout();
-        echo '<div id="wcof_checkout_address_field">';
-        woocommerce_form_field('wcof_delivery_address', [
+    public function add_delivery_address_field($fields){
+        if(!isset($fields['billing'])) $fields['billing'] = [];
+        $fields['billing']['wcof_delivery_address'] = [
             'type'     => 'text',
-            'class'    => ['form-row-wide'],
-            'required' => true,
             'label'    => __('Address','wc-order-flow'),
-        ], $checkout->get_value('wcof_delivery_address'));
-        echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
-        echo '</div>';
+            'required' => true,
+            'class'    => ['form-row-wide'],
+            'priority' => 10,
+        ];
+        return $fields;
     }
 
     public function hide_billing_fields($fields){
