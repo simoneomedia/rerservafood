@@ -81,9 +81,13 @@ final class WCOF_Plugin {
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
 
         add_filter('woocommerce_checkout_fields', [$this,'add_delivery_address_field']);
+        add_filter('woocommerce_blocks_checkout_fields', [$this,'block_add_delivery_address_field']);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
         add_action('woocommerce_checkout_update_order_meta', [$this,'save_delivery_address']);
         add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields'], 999);
+        add_action('woocommerce_store_api_checkout_validation', [$this,'store_api_validate_checkout'], 10, 2);
+        add_filter('woocommerce_store_api_checkout_update_order_from_request', [$this,'store_api_save_delivery_address'], 10, 2);
+        add_action('woocommerce_blocks_loaded', [$this,'register_blocks_integration']);
 
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
@@ -856,6 +860,16 @@ final class WCOF_Plugin {
         return $fields;
     }
 
+    public function block_add_delivery_address_field($fields){
+        if(!isset($fields['billing'])) $fields['billing'] = [];
+        $fields['billing']['wcof_delivery_address'] = [
+            'type'     => 'text',
+            'label'    => __('Address','wc-order-flow'),
+            'required' => true,
+        ];
+        return $fields;
+    }
+
     public function hide_billing_fields($fields){
         $base = ['first_name','last_name','company','address_1','address_2','city','postcode','state','country','phone'];
         foreach(['billing','shipping'] as $section){
@@ -889,6 +903,40 @@ final class WCOF_Plugin {
                 update_post_meta($order_id, '_wcof_delivery_address', $addr);
             }
         }
+    }
+
+    public function store_api_validate_checkout($data, $errors){
+        $codes = $this->delivery_postal_codes();
+        $postcode = isset($data['billing_address']['postcode']) ? sanitize_text_field($data['billing_address']['postcode']) : '';
+        $address  = isset($data['billing_address']['wcof_delivery_address']) ? sanitize_text_field($data['billing_address']['wcof_delivery_address']) : '';
+        if($address===''){
+            $errors->add('wcof_delivery_address', __('Please enter a delivery address.','wc-order-flow'));
+        }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
+            $errors->add('wcof_delivery_address', __('The address is outside of our delivery area.','wc-order-flow'));
+        }
+    }
+
+    public function store_api_save_delivery_address($order, $request){
+        $billing = $request->get_param('billing_address');
+        $addr = isset($billing['wcof_delivery_address']) ? sanitize_text_field($billing['wcof_delivery_address']) : '';
+        if($addr !== ''){
+            $order->update_meta_data('_wcof_delivery_address', $addr);
+        }
+        return $order;
+    }
+
+    public function register_blocks_integration(){
+        if( !class_exists('\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationInterface') ) return;
+        if( !class_exists('\\Automattic\\WooCommerce\\Blocks\\Package') ) return;
+
+        if( !class_exists('WCOF_Blocks_Integration') ){
+            require_once __DIR__ . '/class-wcof-blocks-integration.php';
+        }
+
+        $container = \Automattic\WooCommerce\Blocks\Package::container();
+        if( !$container->has( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationRegistry' ) ) return;
+        $registry = $container->get( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationRegistry' );
+        $registry->register( new WCOF_Blocks_Integration( $this ) );
     }
     public function settings_page(){
         $s=$this->settings(); ?>
@@ -1072,6 +1120,7 @@ final class WCOF_Plugin {
         return '<div id="wcof-push-debug" style="padding:12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc"></div>';
     }
 }
+
 register_activation_hook(__FILE__, ['WCOF_Plugin','activate']);
 register_deactivation_hook(__FILE__, ['WCOF_Plugin','deactivate']);
 add_action('plugins_loaded', function(){ if(class_exists('WooCommerce')){ new WCOF_Plugin(); } });
