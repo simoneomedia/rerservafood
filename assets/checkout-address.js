@@ -1,6 +1,6 @@
 (function(){
     if(typeof wcofCheckoutAddress === 'undefined') return;
-    document.addEventListener('DOMContentLoaded', function(){
+    function init(){
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var input = document.querySelector('#wcof_delivery_address');
         if(!input) return;
@@ -104,9 +104,14 @@
             placeMarker(e.latlng.lat, e.latlng.lng);
         });
 
-        var wrapper=document.querySelector('.woocommerce-billing-fields__field-wrapper');
-        if(wrapper) wrapper.style.display='none';
         var heading=document.querySelector('.woocommerce-billing-fields > h3');
         if(heading) heading.style.display='none';
-    });
+        var ship=document.querySelector('.woocommerce-shipping-fields');
+        if(ship) ship.style.display='none';
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 })();
