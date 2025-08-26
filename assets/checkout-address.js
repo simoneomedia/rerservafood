@@ -108,5 +108,7 @@
         if(wrapper) wrapper.style.display='none';
         var heading=document.querySelector('.woocommerce-billing-fields > h3');
         if(heading) heading.style.display='none';
+        var ship=document.querySelector('.woocommerce-shipping-fields');
+        if(ship) ship.style.display='none';
     });
 })();
