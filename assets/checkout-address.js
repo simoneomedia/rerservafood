@@ -108,10 +108,6 @@
         if(heading) heading.style.display='none';
         var ship=document.querySelector('.woocommerce-shipping-fields');
         if(ship) ship.style.display='none';
-    }
-    if(document.readyState==='loading'){
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
+
+    });
 })();
