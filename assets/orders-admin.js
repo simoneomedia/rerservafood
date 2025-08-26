@@ -23,6 +23,17 @@
               ? 'st-out'
               : (st==='wc-completed'?'st-comp':'st-rej')));
   }
+  function statusName(st){
+    return st==='wc-on-hold'
+      ? 'Waiting for approval'
+      : (st==='wc-processing'
+          ? 'Preparing'
+          : (st==='wc-out-for-delivery'
+              ? 'Delivering'
+              : (st==='wc-completed'
+                  ? 'Completed'
+                  : (st==='wc-cancelled'?'Canceled':st))));
+  }
   function actionButtons(o){
     if(o.status==='wc-on-hold'){
       return `<input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
@@ -50,7 +61,7 @@
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
         <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}"></div>
         <div class="wcof-meta">
-          <p class="wcof-title">#${htmlEscape(o.number||o.id||'')} <span class="wcof-badge">${htmlEscape(o.status||'')}</span></p>
+          <p class="wcof-title">#${htmlEscape(o.number||o.id||'')} <span class="wcof-badge">${htmlEscape(o.status_name || statusName(o.status)||'')}</span></p>
           <p style="color:#475569">${htmlEscape(o.customer||'')}</p>
         </div>
         <div class="wcof-total"><strong>${htmlEscape(o.total||'')}</strong></div>
@@ -139,7 +150,7 @@
           const left = card.querySelector('.wcof-left');
           if(left){ left.classList.remove('st-proc'); left.classList.add('st-out'); }
           const badge = card.querySelector('.wcof-badge');
-          if(badge) badge.textContent = 'wc-out-for-delivery';
+          if(badge) badge.textContent = statusName('wc-out-for-delivery');
           t.textContent = 'Complete';
           t.classList.remove('btn-out');
           t.classList.add('btn-complete');
@@ -161,7 +172,7 @@
           const left = card.querySelector('.wcof-left');
           if(left){ left.classList.remove('st-out'); left.classList.add('st-comp'); }
           const badge = card.querySelector('.wcof-badge');
-          if(badge) badge.textContent = 'wc-completed';
+          if(badge) badge.textContent = statusName('wc-completed');
           const items = card.querySelector('.wcof-items');
           if(items) items.style.display = 'none';
           t.textContent = 'Dettagli';

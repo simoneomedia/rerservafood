@@ -141,6 +141,17 @@ final class WCOF_Plugin {
         return $n;
     }
 
+    private function status_name($status){
+        switch($status){
+            case self::STATUS_AWAITING: return 'Waiting for approval';
+            case 'wc-processing': return 'Preparing';
+            case self::STATUS_OUT_FOR_DELIVERY: return 'Delivering';
+            case 'wc-completed': return 'Completed';
+            case 'wc-cancelled': return 'Canceled';
+        }
+        return $status;
+    }
+
     /* ===== Force awaiting approval on creation ===== */
     public function set_order_awaiting($order_id, $posted_data, $order){
         if(!$order instanceof WC_Order) $order = wc_get_order($order_id);
@@ -383,7 +394,7 @@ final class WCOF_Plugin {
                     $note  = $o->get_customer_note();
                     $out[]=[
                         'id'=>$id,'number'=>$o->get_order_number(),
-                        'status'=>'wc-'.$status_slug,'eta'=>$eta,
+                        'status'=>'wc-'.$status_slug,'status_name'=>$this->status_name('wc-'.$status_slug),'eta'=>$eta,
                         'arrival'=>$arrival,
                         'total'=>$total_raw,
                         'customer'=>trim($o->get_formatted_billing_full_name()) ?: $o->get_billing_email(),
@@ -413,7 +424,7 @@ final class WCOF_Plugin {
                 $eta=(int)$o->get_meta(self::META_ETA);
                 $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
                 $arrival=$arrival_ts?date_i18n('H:i',$arrival_ts):null;
-                return ['status'=>'wc-'.$o->get_status(),'eta'=>$eta,'arrival'=>$arrival];
+                return ['status'=>'wc-'.$o->get_status(),'status_name'=>$this->status_name('wc-'.$o->get_status()),'eta'=>$eta,'arrival'=>$arrival];
             }
         ]);
     }
@@ -544,18 +555,22 @@ final class WCOF_Plugin {
           .wcof-card{background:var(--wcf-card);border:1px solid var(--wcf-border);border-radius:18px;box-shadow:var(--wcf-shadow);overflow:hidden}
           .wcof-head{display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px}
           .wcof-left{grid-column:1/2;width:6px;height:100%;border-radius:6px}
-          .st-await{background:linear-gradient(180deg,#93c5fd,#60a5fa)}
-          .st-proc {background:linear-gradient(180deg,#86efac,#22c55e)}
-          .st-out  {background:linear-gradient(180deg,#fef08a,#f59e0b)}
+          .st-await{background:linear-gradient(180deg,#fef08a,#facc15)}
+          .st-proc {background:linear-gradient(180deg,#fed7aa,#fb923c)}
+          .st-out  {background:linear-gradient(180deg,#bfdbfe,#60a5fa)}
           .st-comp {background:linear-gradient(180deg,#a7f3d0,#10b981)}
           .st-rej  {background:linear-gradient(180deg,#fecaca,#ef4444)}
-          .wcof-title{margin:0;font-weight:700}
-          .wcof-badge{display:inline-block;padding:.25rem .6rem;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#1e293b;font-size:12px;margin-left:6px}
-          .wcof-arrival{display:inline-block;padding:.35rem .6rem;border-radius:10px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-weight:700}
+          .wcof-title{margin:0;font-weight:600}
+          .wcof-badge{display:inline-block;padding:.25rem .6rem;border-radius:8px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e293b;font-size:12px;margin-left:6px;font-weight:500}
+          .wcof-arrival{display:inline-block;padding:.35rem .6rem;border-radius:8px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-weight:600}
           .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end}
-          .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:10px;padding:.55rem .6rem}
-          .btn{border:none;border-radius:12px;padding:.6rem .9rem;font-weight:700;color:#fff;cursor:pointer}
-          .btn-approve{background:#2563eb} .btn-reject{background:#94a3b8} .btn-out{background:#f59e0b} .btn-complete{background:#10b981} .btn-toggle{background:#6b7280}
+          .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:8px;padding:.5rem .55rem;font-size:14px}
+          .btn{border:none;border-radius:8px;padding:.5rem .85rem;font-weight:600;font-size:14px;color:#fff;cursor:pointer;transition:background .2s}
+          .btn-approve{background:#3b82f6} .btn-approve:hover{background:#2563eb}
+          .btn-reject{background:#94a3b8} .btn-reject:hover{background:#6b7280}
+          .btn-out{background:#f59e0b} .btn-out:hover{background:#d97706}
+          .btn-complete{background:#10b981} .btn-complete:hover{background:#059669}
+          .btn-toggle{background:#6b7280} .btn-toggle:hover{background:#4b5563}
           .wcof-items{padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
           .wcof-info{margin-top:8px;font-size:14px;color:#334155}
           .wcof-info div{margin-top:4px}
@@ -584,12 +599,13 @@ final class WCOF_Plugin {
             $eta=(int)$o->get_meta(self::META_ETA);
             $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
             $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
-            $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej'))); ?>
+            $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej')));
+            $status_name = $this->status_name($status); ?>
           <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>">
             <div class="wcof-head">
               <div class="wcof-left <?php echo $bar; ?>"></div>
               <div class="wcof-meta">
-                <p class="wcof-title">#<?php echo esc_html($o->get_order_number()); ?> <span class="wcof-badge"><?php echo esc_html($status); ?></span></p>
+                <p class="wcof-title">#<?php echo esc_html($o->get_order_number()); ?> <span class="wcof-badge"><?php echo esc_html($status_name); ?></span></p>
                 <p style="color:var(--wcf-muted)"><?php echo esc_html( trim($o->get_formatted_billing_full_name()) ?: $o->get_billing_email() ); ?></p>
               </div>
               <div class="wcof-total"><strong><?php echo wp_kses_post($o->get_formatted_order_total()); ?></strong></div>
