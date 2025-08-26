@@ -79,8 +79,10 @@ final class WCOF_Plugin {
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
-        add_action('woocommerce_after_order_notes', [$this,'render_checkout_address']);
+        add_action('woocommerce_before_checkout_billing_form', [$this,'render_checkout_address']);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
+        add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields']);
+
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
         add_action('woocommerce_order_status_processing',           [$this,'push_approved'], 20);
@@ -852,6 +854,17 @@ final class WCOF_Plugin {
         echo '</div>';
     }
 
+    public function hide_billing_fields($fields){
+        $hide = ['billing_address_1','billing_address_2','billing_city','billing_postcode','billing_state','billing_country'];
+        foreach($hide as $key){
+            if(isset($fields['billing'][$key])){
+                $fields['billing'][$key]['type'] = 'hidden';
+                $fields['billing'][$key]['label'] = '';
+                $fields['billing'][$key]['required'] = false;
+            }
+        }
+        return $fields;
+    }
     public function validate_checkout_address(){
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';

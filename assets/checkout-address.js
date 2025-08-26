@@ -104,8 +104,9 @@
             placeMarker(e.latlng.lat, e.latlng.lng);
         });
 
-        ['billing_address_1','billing_address_2','billing_city','billing_postcode','billing_state','billing_country'].forEach(function(id){
-            var el=document.getElementById(id); if(el) el.closest('.form-row').style.display='none';
-        });
+        var wrapper=document.querySelector('.woocommerce-billing-fields__field-wrapper');
+        if(wrapper) wrapper.style.display='none';
+        var heading=document.querySelector('.woocommerce-billing-fields > h3');
+        if(heading) heading.style.display='none';
     });
 })();
