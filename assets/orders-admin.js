@@ -59,22 +59,22 @@
     const note = htmlEscape(o.note||'');
     return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
-        <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}"></div>
+        <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}" style="grid-row:1 / span 3"></div>
         <div class="wcof-meta">
           <p class="wcof-title">#${htmlEscape(o.number||o.id||'')} <span class="wcof-badge">${htmlEscape(o.status_name || statusName(o.status)||'')}</span></p>
           <p style="color:#475569">${htmlEscape(o.customer||'')}</p>
         </div>
         <div class="wcof-total"><strong>${htmlEscape(o.total||'')}</strong></div>
         <div class="wcof-arrival-wrap">${arrival}</div>
-        <div class="wcof-actions">${actionButtons(o)}</div>
-      </div>
-      <div class="wcof-items" style="padding:12px 16px;background:#f9fafb;border-top:1px dashed #e5e7eb;${collapsed?'display:none;':''}">
-        ${items.map(it=>`<div class="wcof-item"><span>${htmlEscape(it.name)}</span> <strong>× ${it.qty|0}</strong></div>`).join('')}
-        <div class="wcof-info">
-          <div><strong>Indirizzo:</strong> ${address}</div>
-          <div><strong>Telefono:</strong> ${phone}</div>
-          ${note?`<div><strong>Note:</strong> ${note}</div>`:''}
+        <div class="wcof-items" style="grid-column:2 / 6;padding:12px 16px;background:#f9fafb;border-top:1px dashed #e5e7eb;${collapsed?'display:none;':''}">
+          ${items.map(it=>`<div class="wcof-item"><span>${htmlEscape(it.name)}</span> <strong>× ${it.qty|0}</strong></div>`).join('')}
+          <div class="wcof-info">
+            <div><strong>Indirizzo:</strong> ${address}</div>
+            <div><strong>Telefono:</strong> ${phone}</div>
+            ${note?`<div><strong>Note:</strong> ${note}</div>`:''}
+          </div>
         </div>
+        <div class="wcof-actions" style="grid-column:2 / 6">${actionButtons(o)}</div>
       </div>
     </div>`;
   }
