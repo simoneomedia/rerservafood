@@ -1,9 +1,17 @@
 (function(){
     if(typeof wcofCheckoutAddress === 'undefined') return;
-    function init(){
+    document.addEventListener('DOMContentLoaded', function(){
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var input = document.querySelector('#wcof_delivery_address');
         if(!input) return;
+        var wrapper = document.getElementById('wcof_delivery_address_field');
+        if(wrapper && !document.getElementById('wcof-delivery-map')){
+            var mapDiv = document.createElement('div');
+            mapDiv.id = 'wcof-delivery-map';
+            mapDiv.style.height='300px';
+            mapDiv.style.marginTop='10px';
+            wrapper.appendChild(mapDiv);
+        }
         var datalist = document.createElement('datalist');
         datalist.id = 'wcof-address-list';
         document.body.appendChild(datalist);
