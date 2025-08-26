@@ -844,13 +844,14 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function customize_checkout_fields($fields){
-        $fields['billing']['wcof_delivery_address'] = [
+    public function render_checkout_address(){
+        $checkout = WC()->checkout();
+        echo '<div id="wcof_checkout_address_field">';
+        woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
             'class'    => ['form-row-wide'],
             'required' => true,
-
-            'label' => __('Address','wc-order-flow')
+            'label'    => __('Address','wc-order-flow'),
         ], $checkout->get_value('wcof_delivery_address'));
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
         echo '</div>';
@@ -871,9 +872,6 @@ final class WCOF_Plugin {
         return $fields;
     }
 
-    public function render_delivery_map(){
-        echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
-    }
     public function validate_checkout_address(){
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
