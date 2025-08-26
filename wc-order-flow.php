@@ -78,6 +78,10 @@ final class WCOF_Plugin {
         add_action('admin_init', [$this,'maybe_redirect_setup']);
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
+        add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
+        add_action('woocommerce_before_checkout_billing_form', [$this,'render_checkout_address']);
+        add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
+        add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields']);
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
         add_action('woocommerce_order_status_processing',           [$this,'push_approved'], 20);
@@ -800,7 +804,8 @@ final class WCOF_Plugin {
             'open_time'=>isset($v['open_time'])?sanitize_text_field($v['open_time']):'',
             'close_time'=>isset($v['close_time'])?sanitize_text_field($v['close_time']):'',
             'store_closed'=>!empty($v['store_closed'])?1:0,
-            'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0
+            'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0,
+            'postal_codes'=>isset($v['postal_codes'])?sanitize_text_field($v['postal_codes']):''
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
@@ -814,8 +819,58 @@ final class WCOF_Plugin {
         return wp_parse_args($d,[
             'enable'=>0,'app_id'=>'','rest_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
-            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1
+            'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
+            'postal_codes'=>''
         ]);
+    }
+
+    public function delivery_postal_codes(){
+        $codes = array_map('trim', explode(',', $this->settings()['postal_codes']));
+        $codes = array_filter($codes, function($c){ return $c!==''; });
+        return $codes;
+    }
+
+    public function enqueue_checkout_scripts(){
+        if( !function_exists('is_checkout') || !is_checkout() ) return;
+        $codes = $this->delivery_postal_codes();
+        wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
+        wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
+        wp_enqueue_script('wcof-checkout-address', plugins_url('assets/checkout-address.js', __FILE__), ['leaflet'], '1.0', true);
+        wp_localize_script('wcof-checkout-address', 'wcofCheckoutAddress', [
+            'postalCodes' => $codes,
+        ]);
+    }
+
+    public function render_checkout_address($checkout){
+        echo '<div id="wcof-delivery-address"><h3>'.esc_html__('Delivery address','wc-order-flow').'</h3>';
+        woocommerce_form_field('wcof_delivery_address', [
+            'type' => 'text',
+            'class' => ['form-row-wide'],
+            'required' => true,
+            'label' => __('Address','wc-order-flow')
+        ], $checkout->get_value('wcof_delivery_address'));
+        echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
+        echo '</div>';
+    }
+
+    public function hide_billing_fields($fields){
+        $hide = ['billing_address_1','billing_address_2','billing_city','billing_postcode','billing_state','billing_country'];
+        foreach($hide as $key){
+            if(isset($fields['billing'][$key])){
+                $fields['billing'][$key]['type'] = 'hidden';
+                $fields['billing'][$key]['label'] = '';
+                $fields['billing'][$key]['required'] = false;
+            }
+        }
+        return $fields;
+    }
+
+    public function validate_checkout_address(){
+        $codes = $this->delivery_postal_codes();
+        $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
+        if( !empty($codes) && !in_array($postcode, $codes, true) ){
+            wc_add_notice(__('The address is outside of our delivery area.','wc-order-flow'), 'error');
+        }
     }
     public function settings_page(){
         $s=$this->settings(); ?>
@@ -826,6 +881,7 @@ final class WCOF_Plugin {
             <h2>Store</h2>
             <table class="form-table" role="presentation">
               <tr><th scope="row">Address</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
+              <tr><th scope="row">Delivery postal codes</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[postal_codes]" value="<?php echo esc_attr($s['postal_codes']); ?>" placeholder="e.g. 00100,00101"/></td></tr>
               <tr><th scope="row">Opening days</th><td>
                 <?php foreach(['mon'=>'Mon','tue'=>'Tue','wed'=>'Wed','thu'=>'Thu','fri'=>'Fri','sat'=>'Sat','sun'=>'Sun'] as $k=>$lbl): ?>
                   <label style="margin-right:8px"><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_days][]" value="<?php echo esc_attr($k); ?>" <?php checked(in_array($k,$s['open_days'],true)); ?>/> <?php echo esc_html($lbl); ?></label>
