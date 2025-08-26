@@ -926,6 +926,7 @@ final class WCOF_Plugin {
     }
 
     public function register_blocks_integration(){
+
         if( !class_exists('\\Automattic\\WooCommerce\\Blocks\\Package') ) return;
         $container = \Automattic\WooCommerce\Blocks\Package::container();
         if( !$container->has( '\\Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationRegistry' ) ) return;
@@ -1114,6 +1115,7 @@ final class WCOF_Plugin {
         return '<div id="wcof-push-debug" style="padding:12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc"></div>';
     }
 }
+
 
 class WCOF_Blocks_Integration implements \Automattic\WooCommerce\Blocks\Integrations\IntegrationInterface {
     private $plugin;
