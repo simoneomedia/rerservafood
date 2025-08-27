@@ -886,6 +886,8 @@ final class WCOF_Plugin {
 
             'label'    => __('Address','wc-order-flow'),
         ], $value);
+        // Hidden field filled with the resolved address from the map.
+        echo '<input type="text" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="" required style="position:absolute;left:-9999px;width:1px;height:1px;" />';
         // Hidden field used to prevent checkout unless a valid address
         // has been selected. It is filled via JS when the marker resolves
         // to an allowed postal code.
@@ -918,9 +920,12 @@ final class WCOF_Plugin {
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
         $address  = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
+        $resolved = isset($_POST['wcof_delivery_resolved']) ? sanitize_text_field($_POST['wcof_delivery_resolved']) : '';
         $valid    = isset($_POST['wcof_delivery_valid']) ? sanitize_text_field($_POST['wcof_delivery_valid']) : '';
         if($address===''){
             wc_add_notice(__('Please enter a delivery address.','wc-order-flow'), 'error');
+        }elseif($resolved===''){
+            wc_add_notice(__('Please confirm the address on the map.','wc-order-flow'), 'error');
         }elseif($valid===''){
             wc_add_notice(__('Please select a valid address from the map.','wc-order-flow'), 'error');
         }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
@@ -933,6 +938,12 @@ final class WCOF_Plugin {
             $addr = sanitize_text_field($_POST['wcof_delivery_address']);
             if($addr !== ''){
                 update_post_meta($order_id, '_wcof_delivery_address', $addr);
+            }
+        }
+        if(isset($_POST['wcof_delivery_resolved'])){
+            $resolved = sanitize_text_field($_POST['wcof_delivery_resolved']);
+            if($resolved !== ''){
+                update_post_meta($order_id, '_wcof_delivery_resolved', $resolved);
             }
         }
     }
