@@ -82,14 +82,18 @@
         function loadDeliveryAreas(){
             if(!allowed.length) return;
             var reqs = allowed.map(function(pc){
-                return fetch('https://nominatim.openstreetmap.org/search?format=geojson&polygon_geojson=1&limit=1&postalcode='+encodeURIComponent(pc))
+                return fetch('https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&limit=1&postalcode='+encodeURIComponent(pc))
                     .then(function(r){ return r.json(); })
                     .then(function(data){
-                        if(!data.features || !data.features.length) return;
-                        var feature = data.features[0];
-                        var poly = Leaflet.geoJSON(feature.geometry, {color:'#2563eb', weight:2, fillOpacity:0}).addTo(map);
+                        if(!Array.isArray(data) || !data.length) return;
+                        var feature = data[0];
+                        if(!feature.geojson) return;
+                        var poly = Leaflet.geoJSON(feature.geojson, {color:'#2563eb', weight:2, fillOpacity:0}).addTo(map);
                         highlightPolys.push(poly);
-                        deliveryRings = deliveryRings.concat(extractRings(feature.geometry));
+                        deliveryRings = deliveryRings.concat(extractRings(feature.geojson));
+                    })
+                    .catch(function(err){
+                        console.error('Failed to load delivery area', err);
                     });
             });
             Promise.all(reqs).then(function(){
@@ -104,6 +108,8 @@
                 }).addTo(map);
                 var group = Leaflet.featureGroup(highlightPolys);
                 map.fitBounds(group.getBounds().pad(0.5));
+            }).catch(function(err){
+                console.error('Failed to load delivery areas', err);
             });
         }
 
@@ -132,6 +138,10 @@
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
                     document.querySelector('#billing_country').value = (addr.country_code || '').toUpperCase();
                     lastValid = latlng;
+                })
+                .catch(function(err){
+                    console.error('Reverse geocoding failed', err);
+                    setError('Unable to verify address');
                 });
         }
 
@@ -168,6 +178,12 @@
                         return;
                     }
                     placeMarker(item.lat, item.lon);
+                })
+                .catch(function(err){
+                    console.error('Address lookup failed', err);
+                    setError('Unable to contact geocoding service');
+                    input.setCustomValidity('Unable to contact geocoding service');
+                    input.reportValidity();
                 });
         }
 
