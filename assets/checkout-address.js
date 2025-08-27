@@ -1,5 +1,14 @@
+/**
+ * Checkout address helper.
+ *
+ * Initializes Leaflet map and address autocomplete once the DOM is ready.
+ * The original file defined `init` but never executed it and left a stray
+ * closing `);` which broke the script and could prevent jQuery or other
+ * scripts from running properly.
+ */
 (function(){
     if(typeof wcofCheckoutAddress === 'undefined') return;
+
     function init(){
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var input = document.querySelector('#wcof_delivery_address');
@@ -108,5 +117,8 @@
         if(heading) heading.style.display='none';
         var ship=document.querySelector('.woocommerce-shipping-fields');
         if(ship) ship.style.display='none';
-    });
+    }
+
+    // Wait for the DOM to be fully loaded before initializing.
+    document.addEventListener('DOMContentLoaded', init);
 })();
