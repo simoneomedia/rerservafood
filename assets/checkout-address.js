@@ -1,7 +1,7 @@
 /**
  * Checkout address helper.
  *
- * Initializes Leaflet map and address autocomplete once the DOM is ready.
+ * Initializes Leaflet map and address search once the DOM is ready.
  * The original file defined `init` but never executed it and left a stray
  * closing `);` which broke the script and could prevent jQuery or other
  * scripts from running properly.
@@ -19,10 +19,6 @@
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var input = document.querySelector('#wcof_delivery_address');
         if(!input) return;
-        var datalist = document.createElement('datalist');
-        datalist.id = 'wcof-address-list';
-        document.body.appendChild(datalist);
-        input.setAttribute('list', datalist.id);
         var mapEl = document.getElementById('wcof-delivery-map');
         if(!mapEl) return;
         var map = Leaflet.map(mapEl);
@@ -53,7 +49,6 @@
 
         var marker = null;
         var lastValid = null;
-        var suggestions = [];
 
         // Always show a world view without restricting map bounds. Postal code
         // limits are checked only after the user selects an address.
@@ -90,48 +85,26 @@
             reverseAndFill(latlng);
         }
 
-        input.addEventListener('input', function(){
+        function searchAddress(){
             var q = input.value;
             if(q.length < 3) return;
-            fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q='+encodeURIComponent(q))
+            fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
                 .then(function(r){ return r.json(); })
                 .then(function(data){
-                    datalist.innerHTML='';
-                    suggestions=[];
-                    var idx=0;
-                    data.forEach(function(item){
-                        if(!item.address || !item.address.postcode) return;
-                        if(allowed.length && allowed.indexOf(item.address.postcode) === -1) return;
-                        var opt = document.createElement('option');
-                        opt.value = item.display_name;
-                        opt.setAttribute('data-idx', idx);
-                        datalist.appendChild(opt);
-                        suggestions[idx]=item;
-                        idx++;
-                    });
+                    if(!Array.isArray(data) || !data.length) return;
+                    var item = data[0];
+                    if(!item.address || !item.address.postcode) return;
+                    if(allowed.length && allowed.indexOf(item.address.postcode) === -1) return;
+                    placeMarker(item.lat, item.lon);
                 });
-        });
+        }
 
-        input.addEventListener('change', function(){
-            var opt = Array.from(datalist.options).find(function(o){ return o.value === input.value; });
-            if(opt){
-                var item = suggestions[opt.getAttribute('data-idx')];
-                if(item){ placeMarker(item.lat, item.lon); }
-                return;
+        input.addEventListener('change', searchAddress);
+        input.addEventListener('keydown', function(e){
+            if(e.key === 'Enter'){
+                e.preventDefault();
+                searchAddress();
             }
-            var q=input.value;
-            if(q.length < 3) return;
-            fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
-                .then(function(r){return r.json();})
-                .then(function(data){
-                    var item = null;
-                    data.some(function(i){
-                        if(!i.address || !i.address.postcode) return false;
-                        if(allowed.length && allowed.indexOf(i.address.postcode) === -1) return false;
-                        item = i; return true;
-                    });
-                    if(item){ placeMarker(item.lat, item.lon); }
-                });
         });
 
         map.on('click', function(e){
