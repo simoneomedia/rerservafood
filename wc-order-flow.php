@@ -37,6 +37,10 @@ final class WCOF_Plugin {
         add_action('init', [$this,'register_statuses']);
         add_filter('wc_order_statuses', [$this,'add_statuses_to_list']);
 
+        // Force classic cart and checkout templates
+        add_filter('woocommerce_checkout_is_blocks_enabled', '__return_false');
+        add_filter('woocommerce_cart_is_blocks_enabled', '__return_false');
+
         // Force new orders to awaiting approval
         add_action('woocommerce_checkout_order_processed', [$this,'set_order_awaiting'], 99, 3);
         add_action('woocommerce_new_order',               [$this,'force_awaiting_on_create'], 9999, 1);
