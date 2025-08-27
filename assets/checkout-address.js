@@ -90,6 +90,9 @@
                         var poly = Leaflet.geoJSON(feature.geometry, {color:'#2563eb', weight:2, fillOpacity:0}).addTo(map);
                         highlightPolys.push(poly);
                         deliveryRings = deliveryRings.concat(extractRings(feature.geometry));
+                    })
+                    .catch(function(err){
+                        console.error('Failed to load delivery area', err);
                     });
             });
             Promise.all(reqs).then(function(){
@@ -104,6 +107,8 @@
                 }).addTo(map);
                 var group = Leaflet.featureGroup(highlightPolys);
                 map.fitBounds(group.getBounds().pad(0.5));
+            }).catch(function(err){
+                console.error('Failed to load delivery areas', err);
             });
         }
 
@@ -132,6 +137,10 @@
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
                     document.querySelector('#billing_country').value = (addr.country_code || '').toUpperCase();
                     lastValid = latlng;
+                })
+                .catch(function(err){
+                    console.error('Reverse geocoding failed', err);
+                    setError('Unable to verify address');
                 });
         }
 
@@ -168,6 +177,12 @@
                         return;
                     }
                     placeMarker(item.lat, item.lon);
+                })
+                .catch(function(err){
+                    console.error('Address lookup failed', err);
+                    setError('Unable to contact geocoding service');
+                    input.setCustomValidity('Unable to contact geocoding service');
+                    input.reportValidity();
                 });
         }
 
