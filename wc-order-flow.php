@@ -27,6 +27,26 @@ final class WCOF_Plugin {
         if( !get_option('wcof_setup_done') ) add_option('wcof_setup_done', 0);
         add_role('rider', 'Rider', ['read'=>true,'wcof_rider'=>true]);
         flush_rewrite_rules();
+
+        // Switch checkout page to classic shortcode
+        if( function_exists('wc_get_page_id') ){
+            $checkout_id = wc_get_page_id('checkout');
+            if( $checkout_id && $checkout_id > 0 ){
+                $shortcode = '[woocommerce_checkout]';
+                $content = get_post_field('post_content', $checkout_id);
+                if( strpos($content, $shortcode) === false ){
+                    wp_update_post([
+                        'ID' => $checkout_id,
+                        'post_content' => $shortcode,
+                    ]);
+                }
+            }
+        }
+
+        // Disable block based cart & checkout setting
+        update_option('woocommerce_enable_cart_checkout_blocks', 'no');
+        update_option('woocommerce_blocks_cart_checkout_enabled', 'no');
+        update_option('woocommerce_cart_checkout_blocks_enabled', 'no');
     }
     public static function deactivate(){
         remove_role('rider');
@@ -36,6 +56,10 @@ final class WCOF_Plugin {
     public function __construct() {
         add_action('init', [$this,'register_statuses']);
         add_filter('wc_order_statuses', [$this,'add_statuses_to_list']);
+
+        // Force classic cart and checkout templates
+        add_filter('woocommerce_checkout_is_blocks_enabled', '__return_false');
+        add_filter('woocommerce_cart_is_blocks_enabled', '__return_false');
 
         // Force new orders to awaiting approval
         add_action('woocommerce_checkout_order_processed', [$this,'set_order_awaiting'], 99, 3);
@@ -844,13 +868,14 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function customize_checkout_fields($fields){
-        $fields['billing']['wcof_delivery_address'] = [
+    public function render_checkout_address(){
+        $checkout = WC()->checkout();
+        echo '<div id="wcof-checkout-address">';
+        woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
             'class'    => ['form-row-wide'],
             'required' => true,
-
-            'label' => __('Address','wc-order-flow')
+            'label'    => __('Address','wc-order-flow'),
         ], $checkout->get_value('wcof_delivery_address'));
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
         echo '</div>';
