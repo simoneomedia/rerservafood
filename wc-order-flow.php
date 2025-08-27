@@ -868,21 +868,17 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function render_checkout_address( $checkout = null ){
-        if ( ! $checkout instanceof WC_Checkout ) {
-            $checkout = WC()->checkout();
-        }
-        if ( ! $checkout ) {
-            return;
-        }
 
+
+    public function render_checkout_address($checkout){
         echo '<div id="wcof-checkout-address">';
-        woocommerce_form_field( 'wcof_delivery_address', [
+        woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
             'class'    => [ 'form-row-wide' ],
             'required' => true,
-            'label'    => __( 'Address', 'wc-order-flow' ),
-        ], $checkout->get_value( 'wcof_delivery_address' ) );
+
+            'label'    => __('Address','wc-order-flow'),
+        ], $checkout->get_value('wcof_delivery_address'));
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
         echo '</div>';
     }
