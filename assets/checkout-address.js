@@ -21,6 +21,7 @@
         if(!input) return;
         var validInput = document.querySelector('#wcof_delivery_valid');
         var resolvedInput = document.querySelector('#wcof_delivery_resolved');
+        var errorEl = document.getElementById('wcof-delivery-error');
         var dragLink = document.getElementById('wcof-move-marker');
         var mapEl = document.getElementById('wcof-delivery-map');
         if(!mapEl) return;
@@ -54,6 +55,19 @@
         var lastValid = null;
         var editing = false;
 
+        function showError(msg){
+            if(errorEl){
+                errorEl.textContent = msg;
+                errorEl.style.display = 'block';
+            }
+        }
+        function hideError(){
+            if(errorEl){
+                errorEl.textContent = '';
+                errorEl.style.display = 'none';
+            }
+        }
+
         // Always show a world view without restricting map bounds. Postal code
         // limits are checked only after the user selects an address.
         map.setView([0, 0], 2);
@@ -65,16 +79,12 @@
                     var addr = data.address || {};
                     var pc = addr.postcode || '';
                     if(allowed.length && allowed.indexOf(pc) === -1){
-                        alert('Delivery not available in this area');
-                        if(!lastValid){
-                            if(validInput) validInput.value='';
-                            if(resolvedInput) resolvedInput.value='';
-                            input.value='';
-                        }else{
-                            marker.setLatLng(lastValid);
-                        }
+                        showError('Address not in delivery area or not found');
+                        if(validInput) validInput.value='';
+                        if(resolvedInput) resolvedInput.value='';
                         return;
                     }
+                    hideError();
                     var full = data.display_name || '';
                     if(resolvedInput) resolvedInput.value = full;
                     document.querySelector('#billing_postcode').value = pc;
@@ -110,10 +120,16 @@
             fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
                 .then(function(r){ return r.json(); })
                 .then(function(data){
-                    if(!Array.isArray(data) || !data.length) return;
+                    if(!Array.isArray(data) || !data.length){
+                        showError('Address not in delivery area or not found');
+                        return;
+                    }
                     var item = data[0];
-                    if(!item.address || !item.address.postcode) return;
-                    if(allowed.length && allowed.indexOf(item.address.postcode) === -1) return;
+                    if(!item.address || !item.address.postcode || (allowed.length && allowed.indexOf(item.address.postcode) === -1)){
+                        showError('Address not in delivery area or not found');
+                        return;
+                    }
+                    hideError();
                     placeMarker(item.lat, item.lon);
                 });
         }
@@ -121,6 +137,7 @@
         input.addEventListener('input', function(){
             if(validInput) validInput.value='';
             if(resolvedInput) resolvedInput.value='';
+            hideError();
         });
         input.addEventListener('change', searchAddress);
         input.addEventListener('keydown', function(e){
@@ -157,11 +174,10 @@
         if(dragLink){
             dragLink.addEventListener('click', function(e){
                 e.preventDefault();
-                if(!marker) return;
                 editing = true;
                 if(validInput) validInput.value='';
                 if(resolvedInput) resolvedInput.value='';
-                marker.dragging.enable();
+                if(marker) marker.dragging.enable();
                 confirmBtn.style.display = 'block';
             });
         }

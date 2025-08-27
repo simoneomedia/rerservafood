@@ -886,6 +886,9 @@ final class WCOF_Plugin {
 
             'label'    => __('Address','wc-order-flow'),
         ], $value);
+        // Error message container shown when the typed address is
+        // outside the delivery area or cannot be resolved.
+        echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
         // Hidden field filled with the resolved address from the map.
         echo '<input type="text" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="" required style="position:absolute;left:-9999px;width:1px;height:1px;" />';
         // Hidden field used to prevent checkout unless a valid address
