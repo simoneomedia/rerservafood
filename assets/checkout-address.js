@@ -9,7 +9,13 @@
 (function(){
     if(typeof wcofCheckoutAddress === 'undefined') return;
 
+    // Capture Leaflet early to avoid conflicts with other scripts that may
+    // reuse the global `L` variable.
+    var Leaflet = window.L;
+
     function init(){
+        if(!Leaflet || typeof Leaflet.map !== 'function') return;
+
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var input = document.querySelector('#wcof_delivery_address');
         if(!input) return;
@@ -17,8 +23,8 @@
         datalist.id = 'wcof-address-list';
         document.body.appendChild(datalist);
         input.setAttribute('list', datalist.id);
-        var map = L.map('wcof-delivery-map');
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        var map = Leaflet.map('wcof-delivery-map');
+        Leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
         var marker = null;
@@ -37,8 +43,8 @@
                 arr.forEach(function(res){
                     if(res[0] && res[0].boundingbox){
                         var b = res[0].boundingbox;
-                        var bb = [[b[0], b[2]], [b[1], b[3]]];
-                        bounds = bounds ? bounds.extend(bb) : L.latLngBounds(bb);
+                        var bb = Leaflet.latLngBounds([[b[0], b[2]], [b[1], b[3]]]);
+                        bounds = bounds ? bounds.extend(bb) : bb;
                     }
                 });
                 if(bounds){
@@ -48,7 +54,12 @@
             });
         }
 
-        fitBoundsForPostalCodes(allowed);
+        // Show the allowed area or a world view if no postal codes are defined.
+        if(allowed.length){
+            fitBoundsForPostalCodes(allowed);
+        }else{
+            map.setView([0, 0], 2);
+        }
 
         function reverseAndFill(latlng){
             fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
@@ -70,9 +81,9 @@
         }
 
         function placeMarker(lat, lon){
-            var latlng = L.latLng(lat, lon);
+            var latlng = Leaflet.latLng(lat, lon);
             if(!marker){
-                marker = L.marker(latlng, {draggable:true}).addTo(map);
+                marker = Leaflet.marker(latlng, {draggable:true}).addTo(map);
                 marker.on('dragend', function(e){ reverseAndFill(e.target.getLatLng()); });
             }else{
                 marker.setLatLng(latlng);
