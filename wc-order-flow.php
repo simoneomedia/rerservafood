@@ -870,7 +870,14 @@ final class WCOF_Plugin {
 
 
 
-    public function render_checkout_address($checkout){
+    public function render_checkout_address($checkout = null){
+        if( !$checkout instanceof WC_Checkout ){
+            $checkout = WC()->checkout();
+        }
+        $value = '';
+        if( $checkout && method_exists($checkout, 'get_value') ){
+            $value = $checkout->get_value('wcof_delivery_address');
+        }
         echo '<div id="wcof-checkout-address">';
         woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
@@ -878,7 +885,7 @@ final class WCOF_Plugin {
             'required' => true,
 
             'label'    => __('Address','wc-order-flow'),
-        ], $checkout->get_value('wcof_delivery_address'));
+        ], $value);
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
         echo '</div>';
     }
