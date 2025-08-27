@@ -37,6 +37,10 @@ final class WCOF_Plugin {
         add_action('init', [$this,'register_statuses']);
         add_filter('wc_order_statuses', [$this,'add_statuses_to_list']);
 
+        // Force classic cart and checkout templates
+        add_filter('woocommerce_checkout_is_blocks_enabled', '__return_false');
+        add_filter('woocommerce_cart_is_blocks_enabled', '__return_false');
+
         // Force new orders to awaiting approval
         add_action('woocommerce_checkout_order_processed', [$this,'set_order_awaiting'], 99, 3);
         add_action('woocommerce_new_order',               [$this,'force_awaiting_on_create'], 9999, 1);
@@ -844,13 +848,13 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function customize_checkout_fields($fields){
-        $fields['billing']['wcof_delivery_address'] = [
+    public function render_checkout_address($checkout){
+        echo '<div id="wcof-checkout-address">';
+        woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
             'class'    => ['form-row-wide'],
             'required' => true,
-
-            'label' => __('Address','wc-order-flow')
+            'label'    => __('Address','wc-order-flow'),
         ], $checkout->get_value('wcof_delivery_address'));
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
         echo '</div>';
