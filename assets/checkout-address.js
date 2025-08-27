@@ -82,14 +82,16 @@
         function loadDeliveryAreas(){
             if(!allowed.length) return;
             var reqs = allowed.map(function(pc){
-                return fetch('https://nominatim.openstreetmap.org/search?format=geojson&polygon_geojson=1&limit=1&postalcode='+encodeURIComponent(pc))
+                return fetch('https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&limit=1&postalcode='+encodeURIComponent(pc))
                     .then(function(r){ return r.json(); })
                     .then(function(data){
-                        if(!data.features || !data.features.length) return;
-                        var feature = data.features[0];
-                        var poly = Leaflet.geoJSON(feature.geometry, {color:'#2563eb', weight:2, fillOpacity:0}).addTo(map);
+                        if(!Array.isArray(data) || !data.length) return;
+                        var feature = data[0];
+                        if(!feature.geojson) return;
+                        var poly = Leaflet.geoJSON(feature.geojson, {color:'#2563eb', weight:2, fillOpacity:0}).addTo(map);
                         highlightPolys.push(poly);
-                        deliveryRings = deliveryRings.concat(extractRings(feature.geometry));
+                        deliveryRings = deliveryRings.concat(extractRings(feature.geojson));
+
                     })
                     .catch(function(err){
                         console.error('Failed to load delivery area', err);
