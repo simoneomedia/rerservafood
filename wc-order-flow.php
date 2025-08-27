@@ -844,13 +844,13 @@ final class WCOF_Plugin {
         ]);
     }
 
-    public function customize_checkout_fields($fields){
-        $fields['billing']['wcof_delivery_address'] = [
+    public function render_checkout_address($checkout){
+        echo '<div id="wcof-checkout-address">';
+        woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
             'class'    => ['form-row-wide'],
             'required' => true,
-
-            'label' => __('Address','wc-order-flow')
+            'label'    => __('Address','wc-order-flow'),
         ], $checkout->get_value('wcof_delivery_address'));
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
         echo '</div>';
