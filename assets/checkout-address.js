@@ -189,6 +189,14 @@
         if(ship) ship.style.display='none';
     }
 
-    // Wait for the DOM to be fully loaded before initializing.
-    document.addEventListener('DOMContentLoaded', init);
+    // Initialize when the DOM is ready. If this script is loaded after
+    // `DOMContentLoaded` has already fired (e.g. injected in the footer), the
+    // previous implementation would never run `init` and the map would not
+    // appear.  Check `readyState` so `init` is invoked immediately when the
+    // DOM is already parsed.
+    if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', init);
+    }else{
+        init();
+    }
 })();
