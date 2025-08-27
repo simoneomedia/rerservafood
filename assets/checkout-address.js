@@ -98,13 +98,16 @@
                 .then(function(data){
                     datalist.innerHTML='';
                     suggestions=[];
-                    data.forEach(function(item, idx){
+                    var idx=0;
+                    data.forEach(function(item){
                         if(!item.address || !item.address.postcode) return;
+                        if(allowed.length && allowed.indexOf(item.address.postcode) === -1) return;
                         var opt = document.createElement('option');
                         opt.value = item.display_name;
                         opt.setAttribute('data-idx', idx);
                         datalist.appendChild(opt);
                         suggestions[idx]=item;
+                        idx++;
                     });
                 });
         });
@@ -114,7 +117,21 @@
             if(opt){
                 var item = suggestions[opt.getAttribute('data-idx')];
                 if(item){ placeMarker(item.lat, item.lon); }
+                return;
             }
+            var q=input.value;
+            if(q.length < 3) return;
+            fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
+                .then(function(r){return r.json();})
+                .then(function(data){
+                    var item = null;
+                    data.some(function(i){
+                        if(!i.address || !i.address.postcode) return false;
+                        if(allowed.length && allowed.indexOf(i.address.postcode) === -1) return false;
+                        item = i; return true;
+                    });
+                    if(item){ placeMarker(item.lat, item.lon); }
+                });
         });
 
         map.on('click', function(e){
