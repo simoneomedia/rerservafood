@@ -91,6 +91,7 @@
                         var poly = Leaflet.geoJSON(feature.geojson, {color:'#2563eb', weight:2, fillOpacity:0}).addTo(map);
                         highlightPolys.push(poly);
                         deliveryRings = deliveryRings.concat(extractRings(feature.geojson));
+
                     })
                     .catch(function(err){
                         console.error('Failed to load delivery area', err);
