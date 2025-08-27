@@ -19,6 +19,8 @@
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var input = document.querySelector('#wcof_delivery_address');
         if(!input) return;
+        var validInput = document.querySelector('#wcof_delivery_valid');
+        var dragLink = document.getElementById('wcof-move-marker');
         var mapEl = document.getElementById('wcof-delivery-map');
         if(!mapEl) return;
         var map = Leaflet.map(mapEl);
@@ -61,23 +63,34 @@
                     var addr = data.address || {};
                     var pc = addr.postcode || '';
                     if(allowed.length && allowed.indexOf(pc) === -1){
-                        alert('Invalid address');
-                        if(lastValid){ marker.setLatLng(lastValid); }
+                        alert('Delivery not available in this area');
+                        if(!lastValid){
+                            if(validInput) validInput.value='';
+                            input.value='';
+                        }else{
+                            marker.setLatLng(lastValid);
+                        }
                         return;
                     }
+                    var full = data.display_name || '';
+                    input.value = full;
                     document.querySelector('#billing_postcode').value = pc;
-                    document.querySelector('#billing_address_1').value = input.value;
+                    document.querySelector('#billing_address_1').value = full;
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
                     document.querySelector('#billing_country').value = (addr.country_code || '').toUpperCase();
                     lastValid = latlng;
+                    if(validInput) validInput.value='1';
                 });
         }
 
         function placeMarker(lat, lon){
             var latlng = Leaflet.latLng(lat, lon);
             if(!marker){
-                marker = Leaflet.marker(latlng, {draggable:true}).addTo(map);
-                marker.on('dragend', function(e){ reverseAndFill(e.target.getLatLng()); });
+                marker = Leaflet.marker(latlng, {draggable:false}).addTo(map);
+                marker.on('dragend', function(e){
+                    marker.dragging.disable();
+                    reverseAndFill(e.target.getLatLng());
+                });
             }else{
                 marker.setLatLng(latlng);
             }
@@ -99,6 +112,7 @@
                 });
         }
 
+        input.addEventListener('input', function(){ if(validInput) validInput.value=''; });
         input.addEventListener('change', searchAddress);
         input.addEventListener('keydown', function(e){
             if(e.key === 'Enter'){
@@ -110,6 +124,13 @@
         map.on('click', function(e){
             placeMarker(e.latlng.lat, e.latlng.lng);
         });
+
+        if(dragLink){
+            dragLink.addEventListener('click', function(e){
+                e.preventDefault();
+                if(marker){ marker.dragging.enable(); }
+            });
+        }
 
         var heading=document.querySelector('.woocommerce-billing-fields > h3');
         if(heading) heading.style.display='none';
