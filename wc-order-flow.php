@@ -868,6 +868,7 @@ final class WCOF_Plugin {
         ]);
     }
 
+
     public function render_checkout_address($checkout){
         echo '<div id="wcof-checkout-address">';
         woocommerce_form_field('wcof_delivery_address', [
