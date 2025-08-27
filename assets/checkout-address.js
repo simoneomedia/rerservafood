@@ -23,10 +23,34 @@
         datalist.id = 'wcof-address-list';
         document.body.appendChild(datalist);
         input.setAttribute('list', datalist.id);
-        var map = Leaflet.map('wcof-delivery-map');
+        var mapEl = document.getElementById('wcof-delivery-map');
+        if(!mapEl) return;
+        var map = Leaflet.map(mapEl);
         Leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
+
+        // Leaflet calculates the initial map size during construction. When the
+        // container is hidden (e.g. inside a collapsed section) this size ends
+        // up being zero and the map renders incorrectly once shown.  Observe
+        // visibility changes and invalidate the size when the container becomes
+        // visible so tiles and marker positions are recalculated correctly.
+        function ensureVisible(){
+            if(!mapEl) return;
+            if(mapEl.offsetParent !== null){
+                setTimeout(function(){ map.invalidateSize(); }, 0);
+                return true;
+            }
+            return false;
+        }
+        if(!ensureVisible()){
+            var obs = new MutationObserver(function(){
+                if(ensureVisible()) obs.disconnect();
+            });
+            obs.observe(mapEl, {attributes:true, attributeFilter:['style','class']});
+        }
+        window.addEventListener('resize', function(){ map.invalidateSize(); });
+
         var marker = null;
         var lastValid = null;
         var suggestions = [];
