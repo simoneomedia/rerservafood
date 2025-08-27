@@ -26,6 +26,21 @@
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
+        var form = input.form || input.closest('form');
+        var errorEl = document.createElement('div');
+        errorEl.style.color = '#dc2626';
+        errorEl.style.fontSize = '0.9em';
+        errorEl.style.marginTop = '4px';
+        errorEl.style.display = 'none';
+        input.insertAdjacentElement('afterend', errorEl);
+        var submitBtn = form ? form.querySelector('#place_order') : null;
+        if(submitBtn) submitBtn.disabled = true;
+        function setError(msg){
+            errorEl.textContent = msg || '';
+            errorEl.style.display = msg ? 'block' : 'none';
+            if(submitBtn) submitBtn.disabled = !!msg;
+        }
+
         // Leaflet calculates the initial map size during construction. When the
         // container is hidden (e.g. inside a collapsed section) this size ends
         // up being zero and the map renders incorrectly once shown.  Observe
@@ -49,10 +64,53 @@
 
         var marker = null;
         var lastValid = null;
+        var deliveryRings = [];
+        var highlightPolys = [];
+
+        function extractRings(geom){
+            var rings = [];
+            function toLatLngRing(coords){ return coords.map(function(pt){ return [pt[1], pt[0]]; }); }
+            if(!geom) return rings;
+            if(geom.type === 'Polygon'){
+                rings.push(toLatLngRing(geom.coordinates[0]));
+            }else if(geom.type === 'MultiPolygon'){
+                geom.coordinates.forEach(function(poly){ rings.push(toLatLngRing(poly[0])); });
+            }
+            return rings;
+        }
+
+        function loadDeliveryAreas(){
+            if(!allowed.length) return;
+            var reqs = allowed.map(function(pc){
+                return fetch('https://nominatim.openstreetmap.org/search?format=geojson&polygon_geojson=1&limit=1&postalcode='+encodeURIComponent(pc))
+                    .then(function(r){ return r.json(); })
+                    .then(function(data){
+                        if(!data.features || !data.features.length) return;
+                        var feature = data.features[0];
+                        var poly = Leaflet.geoJSON(feature.geometry, {color:'#2563eb', weight:2, fillOpacity:0}).addTo(map);
+                        highlightPolys.push(poly);
+                        deliveryRings = deliveryRings.concat(extractRings(feature.geometry));
+                    });
+            });
+            Promise.all(reqs).then(function(){
+                if(!deliveryRings.length) return;
+                var world = [[-90,-180],[-90,180],[90,180],[90,-180]];
+                Leaflet.polygon([world].concat(deliveryRings), {
+                    stroke:false,
+                    color:'#000',
+                    fillColor:'#000',
+                    fillOpacity:0.5,
+                    interactive:false
+                }).addTo(map);
+                var group = Leaflet.featureGroup(highlightPolys);
+                map.fitBounds(group.getBounds().pad(0.5));
+            });
+        }
 
         // Always show a world view without restricting map bounds. Postal code
         // limits are checked only after the user selects an address.
         map.setView([0, 0], 2);
+        loadDeliveryAreas();
 
         function reverseAndFill(latlng){
             fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
@@ -61,10 +119,14 @@
                     var addr = data.address || {};
                     var pc = addr.postcode || '';
                     if(allowed.length && allowed.indexOf(pc) === -1){
-                        alert('Invalid address');
-                        if(lastValid){ marker.setLatLng(lastValid); }
+                        setError('Delivery not available in this area');
+                        input.setCustomValidity('Invalid delivery address');
+                        input.reportValidity();
+                        if(lastValid){ marker.setLatLng(lastValid); map.setView(lastValid, 16); }
                         return;
                     }
+                    setError('');
+                    input.setCustomValidity('');
                     document.querySelector('#billing_postcode').value = pc;
                     document.querySelector('#billing_address_1').value = input.value;
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
@@ -93,8 +155,18 @@
                 .then(function(data){
                     if(!Array.isArray(data) || !data.length) return;
                     var item = data[0];
-                    if(!item.address || !item.address.postcode) return;
-                    if(allowed.length && allowed.indexOf(item.address.postcode) === -1) return;
+                    if(!item.address || !item.address.postcode){
+                        setError('Address not found');
+                        input.setCustomValidity('Address not found');
+                        input.reportValidity();
+                        return;
+                    }
+                    if(allowed.length && allowed.indexOf(item.address.postcode) === -1){
+                        setError('Delivery not available in this area');
+                        input.setCustomValidity('Invalid delivery address');
+                        input.reportValidity();
+                        return;
+                    }
                     placeMarker(item.lat, item.lon);
                 });
         }
