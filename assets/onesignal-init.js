@@ -1,6 +1,18 @@
 (function(){
   if(!window.WCOF_PUSH || !WCOF_PUSH.appId) return;
   window.OneSignal = window.OneSignal || [];
+
+  // Load hCaptcha before OneSignal because the SDK expects a global
+  // `hcaptcha` object when prompting users for notification permission. On
+  // sites where the hCaptcha script was not already present, OneSignal would
+  // try to access `hcaptcha` and throw a ReferenceError in the console. By
+  // injecting the script here we make sure the object exists whenever the
+  // SDK runs.
+  var hc = document.createElement('script');
+  hc.src = 'https://hcaptcha.com/1/api.js';
+  hc.async = true;
+  document.head.appendChild(hc);
+
   var s = document.createElement('script');
   s.src = 'https://cdn.onesignal.com/sdks/OneSignalSDK.js';
   s.async = true;
