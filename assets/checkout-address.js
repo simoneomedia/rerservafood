@@ -20,6 +20,7 @@
         var input = document.querySelector('#wcof_delivery_address');
         if(!input) return;
         var validInput = document.querySelector('#wcof_delivery_valid');
+        var resolvedInput = document.querySelector('#wcof_delivery_resolved');
         var dragLink = document.getElementById('wcof-move-marker');
         var mapEl = document.getElementById('wcof-delivery-map');
         if(!mapEl) return;
@@ -51,6 +52,7 @@
 
         var marker = null;
         var lastValid = null;
+        var editing = false;
 
         // Always show a world view without restricting map bounds. Postal code
         // limits are checked only after the user selects an address.
@@ -66,6 +68,7 @@
                         alert('Delivery not available in this area');
                         if(!lastValid){
                             if(validInput) validInput.value='';
+                            if(resolvedInput) resolvedInput.value='';
                             input.value='';
                         }else{
                             marker.setLatLng(lastValid);
@@ -73,7 +76,7 @@
                         return;
                     }
                     var full = data.display_name || '';
-                    input.value = full;
+                    if(resolvedInput) resolvedInput.value = full;
                     document.querySelector('#billing_postcode').value = pc;
                     document.querySelector('#billing_address_1').value = full;
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
@@ -83,19 +86,22 @@
                 });
         }
 
-        function placeMarker(lat, lon){
+        function placeMarker(lat, lon, resolve){
             var latlng = Leaflet.latLng(lat, lon);
             if(!marker){
                 marker = Leaflet.marker(latlng, {draggable:false}).addTo(map);
                 marker.on('dragend', function(e){
-                    marker.dragging.disable();
-                    reverseAndFill(e.target.getLatLng());
+                    if(!editing){
+                        reverseAndFill(e.target.getLatLng());
+                    }
                 });
             }else{
                 marker.setLatLng(latlng);
             }
             map.setView(latlng, 16);
-            reverseAndFill(latlng);
+            if(resolve !== false){
+                reverseAndFill(latlng);
+            }
         }
 
         function searchAddress(){
@@ -112,7 +118,10 @@
                 });
         }
 
-        input.addEventListener('input', function(){ if(validInput) validInput.value=''; });
+        input.addEventListener('input', function(){
+            if(validInput) validInput.value='';
+            if(resolvedInput) resolvedInput.value='';
+        });
         input.addEventListener('change', searchAddress);
         input.addEventListener('keydown', function(e){
             if(e.key === 'Enter'){
@@ -122,13 +131,38 @@
         });
 
         map.on('click', function(e){
-            placeMarker(e.latlng.lat, e.latlng.lng);
+            if(editing){
+                placeMarker(e.latlng.lat, e.latlng.lng, false);
+            }
+        });
+
+        var confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.id = 'wcof-confirm-marker';
+        confirmBtn.textContent = 'Confirm marker';
+        confirmBtn.style.display = 'none';
+        confirmBtn.style.marginBottom = '10px';
+        mapEl.parentNode.insertBefore(confirmBtn, mapEl);
+
+        confirmBtn.addEventListener('click', function(e){
+            e.preventDefault();
+            editing = false;
+            confirmBtn.style.display = 'none';
+            if(marker){
+                marker.dragging.disable();
+                reverseAndFill(marker.getLatLng());
+            }
         });
 
         if(dragLink){
             dragLink.addEventListener('click', function(e){
                 e.preventDefault();
-                if(marker){ marker.dragging.enable(); }
+                if(!marker) return;
+                editing = true;
+                if(validInput) validInput.value='';
+                if(resolvedInput) resolvedInput.value='';
+                marker.dragging.enable();
+                confirmBtn.style.display = 'block';
             });
         }
 
