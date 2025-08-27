@@ -55,35 +55,9 @@
         var lastValid = null;
         var suggestions = [];
 
-        function fitBoundsForPostalCodes(codes){
-            if(!codes.length) return;
-            var requests = codes.map(function(pc){
-                return fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode='+encodeURIComponent(pc));
-            });
-            Promise.all(requests).then(function(res){
-                return Promise.all(res.map(function(r){ return r.json(); }));
-            }).then(function(arr){
-                var bounds = null;
-                arr.forEach(function(res){
-                    if(res[0] && res[0].boundingbox){
-                        var b = res[0].boundingbox;
-                        var bb = Leaflet.latLngBounds([[b[0], b[2]], [b[1], b[3]]]);
-                        bounds = bounds ? bounds.extend(bb) : bb;
-                    }
-                });
-                if(bounds){
-                    map.fitBounds(bounds);
-                    map.setMaxBounds(bounds);
-                }
-            });
-        }
-
-        // Show the allowed area or a world view if no postal codes are defined.
-        if(allowed.length){
-            fitBoundsForPostalCodes(allowed);
-        }else{
-            map.setView([0, 0], 2);
-        }
+        // Always show a world view without restricting map bounds. Postal code
+        // limits are checked only after the user selects an address.
+        map.setView([0, 0], 2);
 
         function reverseAndFill(latlng){
             fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
@@ -92,7 +66,7 @@
                     var addr = data.address || {};
                     var pc = addr.postcode || '';
                     if(allowed.length && allowed.indexOf(pc) === -1){
-                        alert('Indirizzo fuori zona consegna');
+                        alert('Invalid address');
                         if(lastValid){ marker.setLatLng(lastValid); }
                         return;
                     }
@@ -126,7 +100,6 @@
                     suggestions=[];
                     data.forEach(function(item, idx){
                         if(!item.address || !item.address.postcode) return;
-                        if(allowed.length && allowed.indexOf(item.address.postcode) === -1) return;
                         var opt = document.createElement('option');
                         opt.value = item.display_name;
                         opt.setAttribute('data-idx', idx);
