@@ -125,7 +125,7 @@
         function searchAddress(){
             var q = input.value;
             if(q.length < 3) return;
-            fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
+            return fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
                 .then(function(r){ return r.json(); })
                 .then(function(data){
                     if(!Array.isArray(data) || !data.length){
@@ -166,6 +166,18 @@
                 searchAddress();
             }
         });
+
+        var valueObserver = new MutationObserver(function(mutations){
+            if(input.value && input.value.trim() !== ''){
+                var result = searchAddress();
+                if(result && typeof result.then === 'function'){
+                    result.then(function(){ valueObserver.disconnect(); });
+                }else{
+                    valueObserver.disconnect();
+                }
+            }
+        });
+        valueObserver.observe(input, {attributes:true, attributeFilter:['value']});
 
         map.on('click', function(e){
             if(editing){
