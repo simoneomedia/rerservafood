@@ -55,6 +55,8 @@
     const arrival = o.arrival ? `<span class="wcof-arrival">${htmlEscape(o.arrival)}</span>` : '—';
     const collapsed = o.status==='wc-completed';
     const address = htmlEscape(o.address||'');
+    const typed = htmlEscape(o.address_typed||'');
+    const coords = htmlEscape(o.coords||'');
     const phone = htmlEscape(o.phone||'');
     const note = htmlEscape(o.note||'');
     return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}">
@@ -69,7 +71,9 @@
         <div class="wcof-items" style="grid-column:2 / 6;padding:12px 16px;background:#f9fafb;border-top:1px dashed #e5e7eb;${collapsed?'display:none;':''}">
           ${items.map(it=>`<div class="wcof-item"><span>${htmlEscape(it.name)}</span> <strong>× ${it.qty|0}</strong></div>`).join('')}
           <div class="wcof-info">
-            <div><strong>Indirizzo:</strong> ${address}</div>
+            ${address?`<div><strong>Indirizzo mappa:</strong> ${address}</div>`:''}
+            ${typed?`<div><strong>Indirizzo digitato:</strong> ${typed}</div>`:''}
+            ${coords?`<div><strong>Coordinate:</strong> ${coords}</div>`:''}
             <div><strong>Telefono:</strong> ${phone}</div>
             ${note?`<div><strong>Note:</strong> ${note}</div>`:''}
           </div>
