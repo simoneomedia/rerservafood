@@ -433,6 +433,12 @@ final class WCOF_Plugin {
                     }
                     $phone = $o->get_billing_phone();
                     $note  = $o->get_customer_note();
+                    $payment = '';
+                    if($o->get_payment_method() === 'cod'){
+                        $payment = 'CASH ON DELIVERY!';
+                    } elseif($o->is_paid()){
+                        $payment = 'already paid online';
+                    }
                     $meta  = [];
                     foreach ( $o->get_meta_data() as $md ) {
                         $data = $md->get_data();
@@ -463,6 +469,7 @@ final class WCOF_Plugin {
                         'coords'=>$coords,
                         'phone'=>$phone,
                         'note'=>$note,
+                        'payment'=>$payment,
                         'meta'=>$meta,
                     ];
                 }
@@ -623,7 +630,7 @@ final class WCOF_Plugin {
           .wcof-items{grid-column:2/6;padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
           .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end;grid-column:2/6}
           .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:8px;padding:.5rem .55rem;font-size:14px}
-          .btn{border:none;border-radius:8px;padding:.5rem .85rem;font-weight:600;font-size:14px;color:#fff;cursor:pointer;transition:background .2s}
+          .btn{border:none;border-radius:8px;padding:.5rem .85rem;font-weight:600;font-size:14px;color:#fff;cursor:pointer;transition:background .2s;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;text-decoration:none}
           .btn-approve{background:#3b82f6} .btn-approve:hover{background:#2563eb}
           .btn-reject{background:#94a3b8} .btn-reject:hover{background:#6b7280}
           .btn-out{background:#f59e0b} .btn-out:hover{background:#d97706}
@@ -680,6 +687,12 @@ final class WCOF_Plugin {
             }
             $phone = $o->get_billing_phone();
             $note  = $o->get_customer_note();
+            $payment = '';
+            if($o->get_payment_method() === 'cod'){
+                $payment = 'CASH ON DELIVERY!';
+            } elseif($o->is_paid()){
+                $payment = 'already paid online';
+            }
         ?>
           <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>">
             <div class="wcof-head">
@@ -714,6 +727,7 @@ final class WCOF_Plugin {
                   </div>
                 <?php endif; ?>
                 <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?><?php if($phone): ?> <a class="btn btn-phone" target="_blank" href="tel:<?php echo esc_attr(preg_replace('/[^0-9+]/', '', $phone)); ?>">📞</a><?php endif; ?></div>
+                <?php if($payment): ?><div><strong>Payment:</strong> <?php echo esc_html($payment); ?></div><?php endif; ?>
                 <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
               </div>
               </div>

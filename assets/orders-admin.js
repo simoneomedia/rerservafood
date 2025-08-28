@@ -58,6 +58,7 @@
     const typed = htmlEscape(o.address_typed||'');
     const phone = htmlEscape(o.phone||'');
     const note = htmlEscape(o.note||'');
+    const payment = htmlEscape(o.payment||'');
     const metaHtml = o.meta && typeof o.meta === 'object'
       ? Object.keys(o.meta).map(k=>`<div><strong>${htmlEscape(k)}:</strong> ${htmlEscape(o.meta[k])}</div>`).join('')
       : '';
@@ -76,6 +77,7 @@
             ${typed ? `<div><strong>Indirizzo digitato:</strong> ${typed}${address?`<div class=\"wcof-address-extra\">(${address})</div>`:''}${(o.address_typed||o.coords)?`<div class=\"wcof-map-buttons\">${o.address_typed?`<a class=\"btn btn-map\" target=\"_blank\" href=\"https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address_typed)}\">Mappa indirizzo</a>`:''}${o.coords?` <a class=\"btn btn-map\" target=\"_blank\" href=\"https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.coords)}\">Mappa coord</a>`:''}</div>`:''}</div>` : (address?`<div><strong>Indirizzo mappa:</strong> ${address}${o.coords?`<div class=\"wcof-map-buttons\"><a class=\"btn btn-map\" target=\"_blank\" href=\"https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.coords)}\">Mappa</a></div>`:''}</div>`:'')}
 
             <div><strong>Telefono:</strong> ${phone} ${o.phone?`<a class=\"btn btn-phone\" href=\"tel:${encodeURIComponent(o.phone)}\" target=\"_blank\">\u260E\ufe0f</a>`:''}</div>
+            ${payment?`<div><strong>Payment:</strong> ${payment}</div>`:''}
             <div><strong>Note:</strong> ${note || '—'}</div>
             ${metaHtml}
           </div>
