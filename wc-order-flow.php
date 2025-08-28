@@ -1022,17 +1022,13 @@ final class WCOF_Plugin {
     }
 
     public function display_delivery_address_front($order){
-        $typed    = $order->get_meta('_wcof_delivery_address');
-        $resolved = $order->get_meta('_wcof_delivery_resolved');
-        $coords   = $order->get_meta('_wcof_delivery_coords');
-        if(!$typed && !$resolved && !$coords) return;
+        $typed  = $order->get_meta('_wcof_delivery_address');
+        $coords = $order->get_meta('_wcof_delivery_coords');
+        if(!$typed && !$coords) return;
         echo '<section class="woocommerce-order-delivery-address">';
         echo '<h2>'.esc_html__('Delivery address','wc-order-flow').'</h2>';
         if($typed){
             echo '<p><strong>'.esc_html__('Address','wc-order-flow').':</strong> '.esc_html($typed).'</p>';
-        }
-        if($resolved){
-            echo '<p><strong>'.esc_html__('Map address','wc-order-flow').':</strong> '.esc_html($resolved).'</p>';
         }
         if($coords){
             echo '<p><strong>'.esc_html__('Coordinates','wc-order-flow').':</strong> '.esc_html($coords).'</p>';
