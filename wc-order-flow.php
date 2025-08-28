@@ -644,15 +644,21 @@ final class WCOF_Plugin {
             $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
             $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej')));
             $status_name = $this->status_name($status);
-            $address = trim(implode(', ', array_filter([
-                $o->get_shipping_address_1(), $o->get_shipping_address_2(),
-                trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
-            ])));
+            $typed    = $o->get_meta('_wcof_delivery_address');
+            $resolved = $o->get_meta('_wcof_delivery_resolved');
+            $coords   = $o->get_meta('_wcof_delivery_coords');
+            $address  = $resolved;
             if(!$address){
                 $address = trim(implode(', ', array_filter([
-                    $o->get_billing_address_1(), $o->get_billing_address_2(),
-                    trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                    $o->get_shipping_address_1(), $o->get_shipping_address_2(),
+                    trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
                 ])));
+                if(!$address){
+                    $address = trim(implode(', ', array_filter([
+                        $o->get_billing_address_1(), $o->get_billing_address_2(),
+                        trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                    ])));
+                }
             }
             $phone = $o->get_billing_phone();
             $note  = $o->get_customer_note();
@@ -671,7 +677,15 @@ final class WCOF_Plugin {
                 <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
               <?php endforeach; ?>
               <div class="wcof-info">
-                <div><strong>Indirizzo:</strong> <?php echo esc_html($address); ?></div>
+                <?php if($typed): ?>
+                  <div><strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?></div>
+                <?php endif; ?>
+                <?php if($address): ?>
+                  <div><strong>Indirizzo mappa:</strong> <?php echo esc_html($address); ?></div>
+                <?php endif; ?>
+                <?php if($coords): ?>
+                  <div><strong>Coordinate:</strong> <?php echo esc_html($coords); ?></div>
+                <?php endif; ?>
                 <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?></div>
                 <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
               </div>
