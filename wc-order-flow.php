@@ -433,6 +433,19 @@ final class WCOF_Plugin {
                     }
                     $phone = $o->get_billing_phone();
                     $note  = $o->get_customer_note();
+                    $meta  = [];
+                    foreach ( $o->get_meta_data() as $md ) {
+                        $data = $md->get_data();
+                        $k = isset( $data['key'] ) ? $data['key'] : '';
+                        if ( $k === '' ) {
+                            continue;
+                        }
+                        $v = isset( $data['value'] ) ? $data['value'] : '';
+                        if ( is_array( $v ) || is_object( $v ) ) {
+                            $v = wp_json_encode( $v );
+                        }
+                        $meta[ $k ] = (string) $v;
+                    }
                     $out[]=[
                         'id'=>$id,'number'=>$o->get_order_number(),
                         'status'=>'wc-'.$status_slug,'status_name'=>$this->status_name('wc-'.$status_slug),'eta'=>$eta,
@@ -450,6 +463,7 @@ final class WCOF_Plugin {
                         'coords'=>$coords,
                         'phone'=>$phone,
                         'note'=>$note,
+                        'meta'=>$meta,
                     ];
                 }
                 return ['latest_id'=>$latest_id,'orders'=>$out];
