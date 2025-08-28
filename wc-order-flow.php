@@ -93,6 +93,9 @@ final class WCOF_Plugin {
         add_action('admin_post_wcof_save_store', [$this,'handle_save_store']);
         add_action('admin_post_wcof_add_rider', [$this,'handle_add_rider']);
 
+        // Public menu shortcode
+        add_shortcode('castle_menu', [$this,'shortcode_castle_menu']);
+
         // REST
         add_action('rest_api_init', [$this,'register_rest_routes']);
 
@@ -1258,6 +1261,186 @@ final class WCOF_Plugin {
             'include_external_user_ids' => [ (string)$uid ],
             'ttl'=>300
         ]);
+    }
+
+    /* ===== Frontend menu shortcode ===== */
+    public function shortcode_castle_menu($atts=[]){
+        if(!function_exists('wc_get_products')) return '';
+        $args=[
+            'status'=>'publish',
+            'limit'=>-1,
+            'orderby'=>'menu_order',
+            'order'=>'ASC',
+        ];
+        $products=wc_get_products($args);
+        if(empty($products)) return '<p>No products found.</p>';
+        $currency=get_woocommerce_currency_symbol();
+        $items=[];
+        foreach($products as $p){
+            if(!$p instanceof WC_Product) $p=wc_get_product($p);
+            if(!$p) continue;
+            $terms=get_the_terms($p->get_id(),'product_cat');
+            if(!$terms || is_wp_error($terms)) continue;
+            $section=$terms[0]->name;
+            $items[]=[
+                'id'=>$p->get_id(),
+                'section'=>$section,
+                'title'=>$p->get_name(),
+                'desc'=>wp_strip_all_tags($p->get_short_description()),
+                'price'=>wc_get_price_to_display($p),
+                'img'=>wp_get_attachment_image_url($p->get_image_id(),'large'),
+                'cart'=>$p->add_to_cart_url(),
+                'ingredientes'=>wp_strip_all_tags($p->get_description()),
+                'alergenos'=>[],
+                'valores'=>'',
+            ];
+        }
+        if(empty($items)) return '<p>No products found.</p>';
+        wp_enqueue_script('wc-add-to-cart');
+        ob_start(); ?>
+        <style>
+        .container {width:100%!important;}
+        :root{--bg:#0f1115;--card:#171a21;--muted:#8b93a7;--text:#e9eef8;--brand:#6cf0c2;--accent:#00d1b2;--chip:#202532;--shadow:0 8px 24px rgba(0,0,0,.35);--radius:16px;}
+        *{box-sizing:border-box}
+        html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif}
+        a{color:inherit;text-decoration:none}
+        .wrap{max-width:80%;margin:0 auto;padding:18px}
+        header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,rgba(15,17,21,.98),rgba(15,17,21,.92) 60%,rgba(15,17,21,0));backdrop-filter:blur(8px)}
+        .titlebar{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:10px 0;color:white;}
+        .brand{display:flex;align-items:center;gap:12px}
+        .brand .dot{width:14px;height:14px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 6px rgba(108,240,194,.15)}
+        h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.3px}
+        .search{position:relative;max-width:420px;width:100%;display:none;}
+        .search input{width:100%;border:1px solid #2a3040;background:#121621;color:var(--text);border-radius:12px;padding:12px 40px;outline:none;box-shadow:var(--shadow)}
+        .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);opacity:.7}
+        .chips{display:flex;gap:10px;overflow:auto;padding:8px 0 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+        .chip{flex:0 0 auto;background:var(--chip);border:1px solid #2a3040;color:#d8deea;padding:8px 14px;border-radius:999px;cursor:pointer;transition:.2s;font-size:9px;white-space:nowrap}
+        .chip.active{background:var(--accent);border-color:transparent;color:#041a16}
+        .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+        @media (max-width:640px){ .grid{grid-template-columns:1fr} }
+        .section-title{margin:14px 0 10px;font-size:18px;font-weight:800;letter-spacing:.3px;color:#e8edf7;}
+        .card{background:var(--card);border:1px solid #23293a;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+        .thumb{position:relative;background:#0c0f14;aspect-ratio:16/10}
+        .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+        .content{padding:14px}
+        .title{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:6px}
+        .title h3{margin:0;font-size:16px;line-height:1.25;color:white;}
+        .price{font-weight:700;background:#0f131c;border:1px solid #2a3040;padding:6px 10px;border-radius:10px}
+        .desc{color:var(--muted);font-size:13px;line-height:1.4;min-height:36px;margin:4px 0 10px}
+        .row{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+        .btn{border:1px solid #2a3040;background:#0f131c;color:#dfe7f6;border-radius:10px;padding:8px 10px;font-size:13px;cursor:pointer}
+        .btn.primary{background:var(--accent);color:#011b15;border-color:transparent;font-weight:700}
+        .btn:disabled{opacity:.6;cursor:not-allowed}
+        .pill{display:inline-flex;align-items:center;gap:6px;border:1px dashed #2f364a;background:#121621;padding:6px 8px;border-radius:10px;font-size:12px;cursor:pointer}
+        .pill:hover{border-style:solid}
+        .modal-back{position:fixed;inset:0;background:rgba(4,7,12,.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:40}
+        .modal{width:min(720px,96vw);max-height:90dvh;overflow:auto;background:#0f131c;border:1px solid #2a3040;border-radius:16px;box-shadow:var(--shadow)}
+        .modal header{position:sticky;top:0;background:#0f131c;padding:12px;border-bottom:1px solid #23293a;display:flex;justify-content:space-between;align-items:center}
+        .modal .body{padding:14px}
+        .meta{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        @media (max-width:720px){.meta{display:block}}
+        .meta section{border:1px solid #23293a;border-radius:12px;padding:10px;background:#0b0e14}
+        .meta h4{margin:0 0 6px;font-size:13px;color:#b2bdd4;text-transform:uppercase}
+        .alrg-icons{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+        .alrg-icons .ico{border:1px solid #2a3040;border-radius:9px;padding:6px 8px;display:flex;gap:6px;align-items:center}
+        .ico.major{outline:2px solid var(--accent);outline-offset:2px}
+        .close-x{border:none;background:transparent;color:#bcc7de;font-size:22px;cursor:pointer}
+        @media (max-width:640px){.wrap{max-width:100%;padding:12px}.titlebar{flex-direction:column;align-items:stretch;gap:10px;padding:8px 0}.brand{justify-content:flex-start}.brand h1{font-size:18px}.search{max-width:none}.chips{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px 10px;overflow:visible;padding:10px 0 12px}.chip{width:100%;text-align:center;white-space:normal;padding:10px 12px}}
+        </style>
+        <header>
+          <div class="wrap titlebar">
+            <div class="brand">
+              <h1 style="color:white;text-align:center!important;width:100%;font-family:cursive;padding:20px;">The Castle — La Carta</h1>
+            </div>
+            <div class="search">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79L20 21.5 21.5 20 15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              <input style="display:none!important;" id="q" type="search" placeholder="Buscar platos o alérgenos…">
+            </div>
+          </div>
+          <div class="wrap"><div id="chips" class="chips"></div></div>
+        </header>
+        <main class="wrap" id="top"><div id="sections"></div></main>
+        <div id="back" class="modal-back" role="dialog" aria-modal="true">
+          <div class="modal">
+            <header><strong id="m-title"></strong><button class="close-x" id="m-close" aria-label="Cerrar">×</button></header>
+            <div class="body">
+              <div class="thumb" style="margin-bottom:12px"><img id="m-img" alt=""></div>
+              <div class="price" id="m-price"></div>
+              <p id="m-desc" class="desc"></p>
+              <div class="alrg-icons" id="m-icons"></div>
+              <div class="meta">
+                <section><h4>Ingredientes</h4><div id="m-ingredientes" class="muted"></div></section>
+                <section><h4>Alérgenos (texto completo)</h4><div id="m-alergenos" class="muted"></div></section>
+                <section style="grid-column:1/-1"><h4>Valores nutricionales (100 g)</h4><div id="m-valores" class="muted"></div></section>
+              </div>
+            </div>
+          </div>
+        </div>
+        <script>
+        const MENU = <?php echo wp_json_encode($items, JSON_UNESCAPED_SLASHES); ?>;
+        const CURRENCY = <?php echo json_encode($currency); ?>;
+        const chipsEl = document.getElementById('chips');
+        const sectionsEl = document.getElementById('sections');
+        const sectionOrder = [...new Set(MENU.map(m=>m.section))];
+        const slug = s => 'sec-' + s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+        function renderChips(){
+          chipsEl.innerHTML='';
+          const all=document.createElement('button');
+          all.className='chip active';
+          all.textContent='Todo';
+          all.onclick=()=> document.getElementById('top').scrollIntoView({behavior:'smooth',block:'start'});
+          chipsEl.appendChild(all);
+          sectionOrder.forEach(s=>{
+            const b=document.createElement('button');
+            b.className='chip';
+            b.textContent=s;
+            b.onclick=()=>{const el=document.getElementById(slug(s)); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});};
+            chipsEl.appendChild(b);
+          });
+        }
+        function cardHTML(m){
+          const thumb = m.img ? `<div class="thumb"><img loading="lazy" src="${m.img}" alt="" onerror="this.closest('.thumb').remove()"></div>` : '';
+          return `<div class="card">${thumb}<div class="content"><div class="title"><h3>${m.title}</h3><span class="price">${CURRENCY}${Number(m.price).toFixed(2)}</span></div><p class="desc">${m.desc||''}</p><div class="row"><button class="btn" onclick="openModal('${m.id}')">Alérgenos e info</button><a href="${m.cart}" data-product_id="${m.id}" class="btn primary add_to_cart_button ajax_add_to_cart">Añadir</a><span class="pill">${m.section}</span></div></div></div>`;
+        }
+        function render(){
+          sectionsEl.innerHTML='';
+          sectionOrder.forEach(sec=>{
+            const secId=slug(sec);
+            const group=MENU.filter(m=>m.section===sec);
+            if(!group.length) return;
+            const wrapper=document.createElement('section');
+            wrapper.id=secId;
+            const h=document.createElement('h2');
+            h.className='section-title';
+            h.textContent=sec;
+            wrapper.appendChild(h);
+            const grid=document.createElement('div');
+            grid.className='grid';
+            group.forEach(m=>grid.insertAdjacentHTML('beforeend', cardHTML(m)));
+            wrapper.appendChild(grid);
+            sectionsEl.appendChild(wrapper);
+          });
+        }
+        function openModal(id){
+          const m=MENU.find(x=>x.id==id); if(!m) return;
+          document.getElementById('m-title').textContent=m.title;
+          const imgEl=document.getElementById('m-img');
+          imgEl.src=m.img||'';
+          imgEl.parentElement.style.display=m.img?'':'none';
+          document.getElementById('m-price').textContent=CURRENCY+Number(m.price).toFixed(2);
+          document.getElementById('m-desc').textContent=m.desc||'';
+          document.getElementById('m-ingredientes').textContent=m.ingredientes||'—';
+          document.getElementById('m-alergenos').textContent=(m.alergenos||[]).join(', ')||'—';
+          document.getElementById('m-valores').textContent=m.valores||'—';
+          document.getElementById('back').style.display='flex';
+        }
+        document.getElementById('m-close').onclick=()=>document.getElementById('back').style.display='none';
+        document.getElementById('back').onclick=e=>{ if(e.target.id==='back') e.currentTarget.style.display='none'; };
+        renderChips();
+        render();
+        </script>
+        <?php
+        return ob_get_clean();
     }
 
     /* ===== Push shortcodes ===== */
