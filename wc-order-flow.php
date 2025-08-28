@@ -677,14 +677,14 @@ final class WCOF_Plugin {
                 <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
               <?php endforeach; ?>
               <div class="wcof-info">
-                <?php if($typed): ?>
-                  <div><strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?></div>
-                <?php endif; ?>
                 <?php if($address): ?>
                   <div><strong>Indirizzo mappa:</strong> <?php echo esc_html($address); ?></div>
                 <?php endif; ?>
                 <?php if($coords): ?>
                   <div><strong>Coordinate:</strong> <?php echo esc_html($coords); ?></div>
+                <?php endif; ?>
+                <?php if($typed): ?>
+                  <div><strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?></div>
                 <?php endif; ?>
                 <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?></div>
                 <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
