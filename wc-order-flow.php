@@ -415,15 +415,21 @@ final class WCOF_Plugin {
                     $arrival=$arrival_ts?date_i18n('H:i',$arrival_ts):null;
                     $items=[]; foreach($o->get_items() as $it){ $items[]=['name'=>$it->get_name(),'qty'=>(int)$it->get_quantity()]; }
                     $total_raw = html_entity_decode( wp_strip_all_tags($o->get_formatted_order_total()), ENT_QUOTES, 'UTF-8' );
-                    $address = trim(implode(', ', array_filter([
-                        $o->get_shipping_address_1(), $o->get_shipping_address_2(),
-                        trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
-                    ])));
+                    $resolved = $o->get_meta('_wcof_delivery_resolved');
+                    $typed    = $o->get_meta('_wcof_delivery_address');
+                    $coords   = $o->get_meta('_wcof_delivery_coords');
+                    $address  = $resolved;
                     if(!$address){
                         $address = trim(implode(', ', array_filter([
-                            $o->get_billing_address_1(), $o->get_billing_address_2(),
-                            trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                            $o->get_shipping_address_1(), $o->get_shipping_address_2(),
+                            trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
                         ])));
+                        if(!$address){
+                            $address = trim(implode(', ', array_filter([
+                                $o->get_billing_address_1(), $o->get_billing_address_2(),
+                                trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                            ])));
+                        }
                     }
                     $phone = $o->get_billing_phone();
                     $note  = $o->get_customer_note();
@@ -440,6 +446,8 @@ final class WCOF_Plugin {
                         'out_url'   =>wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id),
                         'complete_url'=>wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id),
                         'address'=>$address,
+                        'address_typed'=>$typed,
+                        'coords'=>$coords,
                         'phone'=>$phone,
                         'note'=>$note,
                     ];
