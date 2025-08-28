@@ -17,11 +17,9 @@
         if(!Leaflet || typeof Leaflet.map !== 'function') return;
 
         var allowed = wcofCheckoutAddress.postalCodes || [];
-        var input = document.querySelector('#wcof_delivery_address');
+        var get = function(id){ return document.getElementById(id); };
+        var input = get('wcof_delivery_address');
         if(!input) return;
-        var validInput = document.querySelector('#wcof_delivery_valid');
-        var resolvedInput = document.querySelector('#wcof_delivery_resolved');
-        var coordInput = document.querySelector('#wcof_delivery_coords');
         var errorEl = document.getElementById('wcof-delivery-error');
         var dragLink = document.getElementById('wcof-move-marker');
         var mapEl = document.getElementById('wcof-delivery-map');
@@ -74,6 +72,9 @@
         map.setView([0, 0], 2);
 
         function reverseAndFill(latlng){
+            var validInput = get('wcof_delivery_valid');
+            var resolvedInput = get('wcof_delivery_resolved');
+            var coordInput = get('wcof_delivery_coords');
             fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
                 .then(function(r){return r.json();})
                 .then(function(data){
@@ -131,6 +132,7 @@
                         showError('Address not in delivery area or not found');
                         document.querySelector('#billing_state').value = '';
                         document.querySelector('#shipping_state').value = '';
+                        var coordInput = get('wcof_delivery_coords');
                         if(coordInput) coordInput.value='';
                         return;
                     }
@@ -139,6 +141,7 @@
                         showError('Address not in delivery area or not found');
                         document.querySelector('#billing_state').value = '';
                         document.querySelector('#shipping_state').value = '';
+                        var coordInput = get('wcof_delivery_coords');
                         if(coordInput) coordInput.value='';
                         return;
                     }
@@ -148,6 +151,9 @@
         }
 
         input.addEventListener('input', function(){
+            var validInput = get('wcof_delivery_valid');
+            var resolvedInput = get('wcof_delivery_resolved');
+            var coordInput = get('wcof_delivery_coords');
             if(validInput) validInput.value='';
             if(resolvedInput) resolvedInput.value='';
             if(coordInput) coordInput.value='';
@@ -189,6 +195,9 @@
             dragLink.addEventListener('click', function(e){
                 e.preventDefault();
                 editing = true;
+                var validInput = get('wcof_delivery_valid');
+                var resolvedInput = get('wcof_delivery_resolved');
+                var coordInput = get('wcof_delivery_coords');
                 if(validInput) validInput.value='';
                 if(resolvedInput) resolvedInput.value='';
                 if(coordInput) coordInput.value='';
