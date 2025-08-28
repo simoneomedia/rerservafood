@@ -13,8 +13,30 @@
     // reuse the global `L` variable.
     var Leaflet = window.L;
 
+    function toggleQuickPayButtons(isEnabled){
+        var selectors = [
+            '.wc-stripe-payment-request-button',
+            '.wc-stripe-payment-request-wrapper',
+            '.wc-stripe-payment-request-button-separator'
+        ];
+        selectors.forEach(function(sel){
+            var els = document.querySelectorAll(sel);
+            els.forEach(function(el){
+                if(isEnabled){
+                    el.style.display = '';
+                    if('disabled' in el) el.disabled = false;
+                }else{
+                    el.style.display = 'none';
+                    if('disabled' in el) el.disabled = true;
+                }
+            });
+        });
+    }
+
     function init(){
         if(!Leaflet || typeof Leaflet.map !== 'function') return;
+
+        toggleQuickPayButtons(false);
 
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var get = function(id){ return document.getElementById(id); };
@@ -88,6 +110,7 @@
                         if(resolvedInput) resolvedInput.value='';
                         document.querySelector('#billing_state').value = '';
                         document.querySelector('#shipping_state').value = '';
+                        toggleQuickPayButtons(false);
                         return;
                     }
                     hideError();
@@ -101,6 +124,7 @@
                     document.querySelector('#shipping_state').value = '';
                     lastValid = latlng;
                     if(validInput) validInput.value='1';
+                    toggleQuickPayButtons(true);
                 });
         }
 
@@ -150,6 +174,7 @@
             if(validInput) validInput.value='';
             if(resolvedInput) resolvedInput.value='';
             hideError();
+            toggleQuickPayButtons(false);
         });
         input.addEventListener('change', searchAddress);
         input.addEventListener('keydown', function(e){
@@ -190,6 +215,7 @@
                 if(validInput) validInput.value='';
                 if(resolvedInput) resolvedInput.value='';
                 if(marker) marker.dragging.enable();
+                toggleQuickPayButtons(false);
             });
         }
 
