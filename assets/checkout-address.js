@@ -21,6 +21,7 @@
         if(!input) return;
         var validInput = document.querySelector('#wcof_delivery_valid');
         var resolvedInput = document.querySelector('#wcof_delivery_resolved');
+        var coordInput = document.querySelector('#wcof_delivery_coords');
         var errorEl = document.getElementById('wcof-delivery-error');
         var dragLink = document.getElementById('wcof-move-marker');
         var mapEl = document.getElementById('wcof-delivery-map');
@@ -82,6 +83,7 @@
                         showError('Address not in delivery area or not found');
                         if(validInput) validInput.value='';
                         if(resolvedInput) resolvedInput.value='';
+                        if(coordInput) coordInput.value='';
                         document.querySelector('#billing_state').value = '';
                         document.querySelector('#shipping_state').value = '';
                         return;
@@ -97,6 +99,7 @@
                     document.querySelector('#shipping_state').value = '';
                     lastValid = latlng;
                     if(validInput) validInput.value='1';
+                    if(coordInput) coordInput.value = latlng.lat + ',' + latlng.lng;
                 });
         }
 
@@ -128,6 +131,7 @@
                         showError('Address not in delivery area or not found');
                         document.querySelector('#billing_state').value = '';
                         document.querySelector('#shipping_state').value = '';
+                        if(coordInput) coordInput.value='';
                         return;
                     }
                     var item = data[0];
@@ -135,6 +139,7 @@
                         showError('Address not in delivery area or not found');
                         document.querySelector('#billing_state').value = '';
                         document.querySelector('#shipping_state').value = '';
+                        if(coordInput) coordInput.value='';
                         return;
                     }
                     hideError();
@@ -145,6 +150,7 @@
         input.addEventListener('input', function(){
             if(validInput) validInput.value='';
             if(resolvedInput) resolvedInput.value='';
+            if(coordInput) coordInput.value='';
             hideError();
         });
         input.addEventListener('change', searchAddress);
@@ -185,6 +191,7 @@
                 editing = true;
                 if(validInput) validInput.value='';
                 if(resolvedInput) resolvedInput.value='';
+                if(coordInput) coordInput.value='';
                 if(marker) marker.dragging.enable();
                 confirmBtn.style.display = 'block';
             });

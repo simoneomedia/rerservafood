@@ -894,11 +894,13 @@ final class WCOF_Plugin {
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
         // Hidden field filled with the resolved address from the map.
-        echo '<input type="text" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="" required style="position:absolute;left:-9999px;width:1px;height:1px;" />';
+        echo '<input type="text" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="" style="position:absolute;left:-9999px;width:1px;height:1px;" />';
         // Hidden field used to prevent checkout unless a valid address
         // has been selected. It is filled via JS when the marker resolves
         // to an allowed postal code.
         echo '<input type="text" id="wcof_delivery_valid" name="wcof_delivery_valid" value="" required style="position:absolute;left:-9999px;width:1px;height:1px;" />';
+        // Hidden field that stores the marker coordinates.
+        echo '<input type="text" id="wcof_delivery_coords" name="wcof_delivery_coords" value="" required style="position:absolute;left:-9999px;width:1px;height:1px;" />';
         // Allow users to correct the marker position manually.
         echo '<p class="wcof-move-marker"><a href="#" id="wcof-move-marker">'.esc_html__('Marker is wrong / let me set the marker','wc-order-flow').'</a></p>';
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
@@ -906,7 +908,7 @@ final class WCOF_Plugin {
     }
 
     public function hide_billing_fields($fields){
-        // Hide unused address fields but keep city and postcode visible
+        // Hide unused address fields but keep city, postcode and phone visible
         $base = ['first_name','last_name','company','address_1','address_2','state','country','phone'];
         foreach(['billing','shipping'] as $section){
             foreach($base as $part){
@@ -918,6 +920,12 @@ final class WCOF_Plugin {
                 }
             }
         }
+        // Unhide and require the billing phone field
+        if(isset($fields['billing']['billing_phone'])){
+            $fields['billing']['billing_phone']['type'] = 'tel';
+            $fields['billing']['billing_phone']['label'] = __('Phone number','wc-order-flow');
+            $fields['billing']['billing_phone']['required'] = true;
+        }
         return $fields;
     }
 
@@ -928,13 +936,11 @@ final class WCOF_Plugin {
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
         $address  = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
-        $resolved = isset($_POST['wcof_delivery_resolved']) ? sanitize_text_field($_POST['wcof_delivery_resolved']) : '';
         $valid    = isset($_POST['wcof_delivery_valid']) ? sanitize_text_field($_POST['wcof_delivery_valid']) : '';
+        $coords   = isset($_POST['wcof_delivery_coords']) ? sanitize_text_field($_POST['wcof_delivery_coords']) : '';
         if($address===''){
             wc_add_notice(__('Please enter a delivery address.','wc-order-flow'), 'error');
-        }elseif($resolved===''){
-            wc_add_notice(__('Please confirm the address on the map.','wc-order-flow'), 'error');
-        }elseif($valid===''){
+        }elseif($valid==='' || $coords===''){
             wc_add_notice(__('Please select a valid address from the map.','wc-order-flow'), 'error');
         }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
             wc_add_notice(__('The address is outside of our delivery area.','wc-order-flow'), 'error');
@@ -954,23 +960,34 @@ final class WCOF_Plugin {
                 update_post_meta($order_id, '_wcof_delivery_resolved', $resolved);
             }
         }
+        if(isset($_POST['wcof_delivery_coords'])){
+            $coords = sanitize_text_field($_POST['wcof_delivery_coords']);
+            if($coords !== ''){
+                update_post_meta($order_id, '_wcof_delivery_coords', $coords);
+            }
+        }
     }
 
     public function display_delivery_address_admin($order){
         $typed    = get_post_meta($order->get_id(), '_wcof_delivery_address', true);
         $resolved = get_post_meta($order->get_id(), '_wcof_delivery_resolved', true);
+        $coords   = get_post_meta($order->get_id(), '_wcof_delivery_coords', true);
         if($typed){
             echo '<p><strong>'.esc_html__('Address','wc-order-flow').':</strong> '.esc_html($typed).'</p>';
         }
         if($resolved){
             echo '<p><strong>'.esc_html__('Map address','wc-order-flow').':</strong> '.esc_html($resolved).'</p>';
         }
+        if($coords){
+            echo '<p><strong>'.esc_html__('Coordinates','wc-order-flow').':</strong> '.esc_html($coords).'</p>';
+        }
     }
 
     public function display_delivery_address_front($order){
         $typed    = $order->get_meta('_wcof_delivery_address');
         $resolved = $order->get_meta('_wcof_delivery_resolved');
-        if(!$typed && !$resolved) return;
+        $coords   = $order->get_meta('_wcof_delivery_coords');
+        if(!$typed && !$resolved && !$coords) return;
         echo '<section class="woocommerce-order-delivery-address">';
         echo '<h2>'.esc_html__('Delivery address','wc-order-flow').'</h2>';
         if($typed){
@@ -979,12 +996,16 @@ final class WCOF_Plugin {
         if($resolved){
             echo '<p><strong>'.esc_html__('Map address','wc-order-flow').':</strong> '.esc_html($resolved).'</p>';
         }
+        if($coords){
+            echo '<p><strong>'.esc_html__('Coordinates','wc-order-flow').':</strong> '.esc_html($coords).'</p>';
+        }
         echo '</section>';
     }
 
     public function email_delivery_address_meta($fields, $sent_to_admin, $order){
         $typed    = $order->get_meta('_wcof_delivery_address');
         $resolved = $order->get_meta('_wcof_delivery_resolved');
+        $coords   = $order->get_meta('_wcof_delivery_coords');
         if($typed){
             $fields['wcof_delivery_address'] = [
                 'label' => __('Address','wc-order-flow'),
@@ -995,6 +1016,12 @@ final class WCOF_Plugin {
             $fields['wcof_delivery_resolved'] = [
                 'label' => __('Map address','wc-order-flow'),
                 'value' => $resolved,
+            ];
+        }
+        if($coords){
+            $fields['wcof_delivery_coords'] = [
+                'label' => __('Coordinates','wc-order-flow'),
+                'value' => $coords,
             ];
         }
         return $fields;
