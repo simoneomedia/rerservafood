@@ -71,11 +71,11 @@
         <div class="wcof-items" style="grid-column:2 / 6;padding:12px 16px;background:#f9fafb;border-top:1px dashed #e5e7eb;${collapsed?'display:none;':''}">
           ${items.map(it=>`<div class="wcof-item"><span>${htmlEscape(it.name)}</span> <strong>× ${it.qty|0}</strong></div>`).join('')}
           <div class="wcof-info">
-            ${typed?`<div><strong>Indirizzo digitato:</strong> ${typed}</div>`:''}
-            ${address?`<div><strong>Indirizzo mappa:</strong> ${address}</div>`:''}
-            ${coords?`<div><strong>Coordinate:</strong> ${coords}</div>`:''}
+            <div><strong>Indirizzo mappa:</strong> ${address || '—'}</div>
+            <div><strong>Coordinate:</strong> ${coords || '—'}</div>
+            <div><strong>Indirizzo digitato:</strong> ${typed || '—'}</div>
             <div><strong>Telefono:</strong> ${phone}</div>
-            ${note?`<div><strong>Note:</strong> ${note}</div>`:''}
+            <div><strong>Note:</strong> ${note || '—'}</div>
           </div>
         </div>
         <div class="wcof-actions" style="grid-column:2 / 6">${actionButtons(o)}</div>
