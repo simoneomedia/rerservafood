@@ -894,13 +894,15 @@ final class WCOF_Plugin {
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
         // Hidden field filled with the resolved address from the map.
-        echo '<input type="text" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="" style="position:absolute;left:-9999px;width:1px;height:1px;" />';
+        echo '<p><label for="wcof_delivery_resolved">'.esc_html__('Resolved address','wc-order-flow').'</label>\n'
+            .'<input type="text" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="" style="width:100%" /></p>';
         // Hidden field used to prevent checkout unless a valid address
         // has been selected. It is filled via JS when the marker resolves
         // to an allowed postal code.
-        echo '<input type="text" id="wcof_delivery_valid" name="wcof_delivery_valid" value="" required style="position:absolute;left:-9999px;width:1px;height:1px;" />';
+        echo '<input type="text" id="wcof_delivery_valid" name="wcof_delivery_valid" value="" style="position:absolute;left:-9999px;width:1px;height:1px;" />';
         // Hidden field that stores the marker coordinates.
-        echo '<input type="text" id="wcof_delivery_coords" name="wcof_delivery_coords" value="" required style="position:absolute;left:-9999px;width:1px;height:1px;" />';
+        echo '<p><label for="wcof_delivery_coords">'.esc_html__('Coordinates','wc-order-flow').'</label>\n'
+            .'<input type="text" id="wcof_delivery_coords" name="wcof_delivery_coords" value="" required style="width:100%" /></p>';
         // Allow users to correct the marker position manually.
         echo '<p class="wcof-move-marker"><a href="#" id="wcof-move-marker">'.esc_html__('Marker is wrong / let me set the marker','wc-order-flow').'</a></p>';
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
@@ -940,7 +942,7 @@ final class WCOF_Plugin {
         $coords   = isset($_POST['wcof_delivery_coords']) ? sanitize_text_field($_POST['wcof_delivery_coords']) : '';
         if($address===''){
             wc_add_notice(__('Please enter a delivery address.','wc-order-flow'), 'error');
-        }elseif($valid==='' || $coords===''){
+        }elseif($coords===''){
             wc_add_notice(__('Please select a valid address from the map.','wc-order-flow'), 'error');
         }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
             wc_add_notice(__('The address is outside of our delivery area.','wc-order-flow'), 'error');
