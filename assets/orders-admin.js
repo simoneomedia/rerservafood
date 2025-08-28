@@ -74,6 +74,7 @@
             <div><strong>Indirizzo mappa:</strong> ${address || '—'}</div>
             <div><strong>Coordinate:</strong> ${coords || '—'}</div>
             <div><strong>Indirizzo digitato:</strong> ${typed || '—'}</div>
+
             <div><strong>Telefono:</strong> ${phone}</div>
             <div><strong>Note:</strong> ${note || '—'}</div>
           </div>
