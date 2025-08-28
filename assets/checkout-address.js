@@ -88,14 +88,13 @@
                     }
                     hideError();
                     var full = data.display_name || '';
-                    var province = addr.county || addr.state || '';
                     if(resolvedInput) resolvedInput.value = full;
                     document.querySelector('#billing_postcode').value = pc;
                     document.querySelector('#billing_address_1').value = full;
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
                     document.querySelector('#billing_country').value = (addr.country_code || '').toUpperCase();
-                    document.querySelector('#billing_state').value = province;
-                    document.querySelector('#shipping_state').value = province;
+                    document.querySelector('#billing_state').value = '';
+                    document.querySelector('#shipping_state').value = '';
                     lastValid = latlng;
                     if(validInput) validInput.value='1';
                 });

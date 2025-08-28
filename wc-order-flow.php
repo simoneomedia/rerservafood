@@ -906,7 +906,8 @@ final class WCOF_Plugin {
     }
 
     public function hide_billing_fields($fields){
-        $base = ['first_name','last_name','company','address_1','address_2','city','postcode','state','country','phone'];
+        // Hide unused address fields but keep city and postcode visible
+        $base = ['first_name','last_name','company','address_1','address_2','state','country','phone'];
         foreach(['billing','shipping'] as $section){
             foreach($base as $part){
                 $key = $section . '_' . $part;
