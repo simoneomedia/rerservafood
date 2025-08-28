@@ -629,8 +629,12 @@ final class WCOF_Plugin {
           .btn-out{background:#f59e0b} .btn-out:hover{background:#d97706}
           .btn-complete{background:#10b981} .btn-complete:hover{background:#059669}
           .btn-toggle{background:#6b7280} .btn-toggle:hover{background:#4b5563}
+          .btn-map{background:#3b82f6} .btn-map:hover{background:#2563eb}
+          .btn-phone{background:#10b981} .btn-phone:hover{background:#059669}
           .wcof-info{margin-top:8px;font-size:14px;color:#334155}
           .wcof-info div{margin-top:4px}
+          .wcof-address-extra{font-size:12px;color:#64748b;margin-top:2px}
+          .wcof-map-buttons{margin-top:4px;display:flex;gap:4px;flex-wrap:wrap}
           .wcof-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ececec}
           .wcof-item:last-child{border-bottom:0}
           .wcof-new{animation:wcofPulse 1s ease-in-out 5;background:#ecfdf5}
@@ -691,16 +695,25 @@ final class WCOF_Plugin {
                 <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
               <?php endforeach; ?>
               <div class="wcof-info">
-                <?php if($address): ?>
-                  <div><strong>Indirizzo mappa:</strong> <?php echo esc_html($address); ?></div>
-                <?php endif; ?>
-                <?php if($coords): ?>
-                  <div><strong>Coordinate:</strong> <?php echo esc_html($coords); ?></div>
-                <?php endif; ?>
                 <?php if($typed): ?>
-                  <div><strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?></div>
+                  <div>
+                    <strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?>
+                    <?php if($address): ?><div class="wcof-address-extra">(<?php echo esc_html($address); ?>)</div><?php endif; ?>
+                    <div class="wcof-map-buttons">
+                      <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($typed)); ?>">Mappa indirizzo</a>
+                      <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                    </div>
+                  </div>
+                <?php elseif($address): ?>
+                  <div>
+                    <strong>Indirizzo mappa:</strong> <?php echo esc_html($address); ?>
+                    <div class="wcof-map-buttons">
+                      <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($address)); ?>">Mappa indirizzo</a>
+                      <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                    </div>
+                  </div>
                 <?php endif; ?>
-                <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?></div>
+                <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?><?php if($phone): ?> <a class="btn btn-phone" target="_blank" href="tel:<?php echo esc_attr(preg_replace('/[^0-9+]/', '', $phone)); ?>">📞</a><?php endif; ?></div>
                 <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
               </div>
               </div>
