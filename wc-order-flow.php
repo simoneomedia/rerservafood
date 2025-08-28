@@ -505,6 +505,7 @@ final class WCOF_Plugin {
           .wcof-hide{display:none!important}
           .wcof-chip{display:inline-block;background:#eef2ff;color:#1e293b;border-radius:999px;padding:.2rem .55rem;font-size:12px;margin-left:6px}
           @media (max-width:640px){ .wcof-hero{padding:14px;border-radius:12px} .wcof-spinner, .wcof-icon{width:52px;height:52px} .wcof-title{font-size:16px} .wcof-sub{font-size:14px} }
+          .woocommerce-order-overview, .woocommerce-order-details, .woocommerce-customer-details{display:none}
         </style>
         <div class="wcof-sticky">
           <div class="wcof-hero">
@@ -553,6 +554,13 @@ final class WCOF_Plugin {
               if(s){ s.textContent='Lo sentimos, pedido rechazado.'; }
               setBar(100);
             }
+            function showCompleted(){
+              var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
+              if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='block';}
+              if(t){ t.innerHTML='<strong>Enjoy!</strong> ☺️'; }
+              if(s){ s.textContent=''; }
+              setBar(100);
+            }
             function check(){
               var url = '<?php echo esc_url( rest_url('wcof/v1/order/') ); ?>' + orderId + '?k=' + encodeURIComponent(k) + '&_=' + Date.now();
               fetch(url, {credentials:'include', cache:'no-store'})
@@ -560,6 +568,7 @@ final class WCOF_Plugin {
                 .then(function(d){
                   if(d && d.status === 'wc-processing'){ showConfirmed(d.eta, d.arrival); setTimeout(check, 5000); }
                   else if(d && d.status === 'wc-out-for-delivery'){ showOut(d.arrival); setTimeout(check, 8000); }
+                  else if(d && d.status === 'wc-completed'){ showCompleted(); }
                   else if(d && d.status === 'wc-cancelled'){ showRejected(); }
                   else { if(tries < 240){ tries++; setTimeout(check, 4500); } }
                 }).catch(function(){ setTimeout(check, 6000); });
