@@ -3,7 +3,7 @@
  * Plugin Name: Reeservafood
  * Description: App‑style order approvals for WooCommerce with ETA, “Rider on the way”, live order board, and integrated OneSignal Web Push (no extra plugin). Mobile‑first UI.
  * Author: Reeserva
- * Version: 1.9.1
+ * Version: 1.9.2
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * License: GPLv2 or later
@@ -415,9 +415,9 @@ final class WCOF_Plugin {
                     $arrival=$arrival_ts?date_i18n('H:i',$arrival_ts):null;
                     $items=[]; foreach($o->get_items() as $it){ $items[]=['name'=>$it->get_name(),'qty'=>(int)$it->get_quantity()]; }
                     $total_raw = html_entity_decode( wp_strip_all_tags($o->get_formatted_order_total()), ENT_QUOTES, 'UTF-8' );
-                    $resolved = $o->get_meta('_wcof_delivery_resolved');
-                    $typed    = $o->get_meta('_wcof_delivery_address');
-                    $coords   = $o->get_meta('_wcof_delivery_coords');
+                    $resolved = get_post_meta($o->get_id(), '_wcof_delivery_resolved', true);
+                    $typed    = get_post_meta($o->get_id(), '_wcof_delivery_address', true);
+                    $coords   = get_post_meta($o->get_id(), '_wcof_delivery_coords', true);
                     $address  = $resolved;
                     if(!$address){
                         $address = trim(implode(', ', array_filter([
@@ -658,9 +658,9 @@ final class WCOF_Plugin {
             $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
             $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej')));
             $status_name = $this->status_name($status);
-            $typed    = $o->get_meta('_wcof_delivery_address');
-            $resolved = $o->get_meta('_wcof_delivery_resolved');
-            $coords   = $o->get_meta('_wcof_delivery_coords');
+            $typed    = get_post_meta($o->get_id(), '_wcof_delivery_address', true);
+            $resolved = get_post_meta($o->get_id(), '_wcof_delivery_resolved', true);
+            $coords   = get_post_meta($o->get_id(), '_wcof_delivery_coords', true);
             $address  = $resolved;
             if(!$address){
                 $address = trim(implode(', ', array_filter([
@@ -725,7 +725,7 @@ final class WCOF_Plugin {
         </div>
         <button id="wcof-sound" class="wcof-sound" type="button" title="Sound">🔔 Sound</button>
         <?php
-        wp_enqueue_script('wcof-orders', plugins_url('assets/orders-admin.js', __FILE__), [], '1.9.0', true);
+        wp_enqueue_script('wcof-orders', plugins_url('assets/orders-admin.js', __FILE__), [], '1.9.2', true);
         wp_localize_script('wcof-orders','WCOF_ORD',[
             'rest'=>esc_url_raw(rest_url('wcof/v1')),
             'nonce'=>wp_create_nonce('wp_rest'),
