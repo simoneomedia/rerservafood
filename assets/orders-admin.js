@@ -59,6 +59,9 @@
     const coords = htmlEscape(o.coords||'');
     const phone = htmlEscape(o.phone||'');
     const note = htmlEscape(o.note||'');
+    const metaHtml = o.meta && typeof o.meta === 'object'
+      ? Object.keys(o.meta).map(k=>`<div><strong>${htmlEscape(k)}:</strong> ${htmlEscape(o.meta[k])}</div>`).join('')
+      : '';
     return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
         <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}" style="grid-row:1 / span 3"></div>
@@ -77,6 +80,7 @@
 
             <div><strong>Telefono:</strong> ${phone}</div>
             <div><strong>Note:</strong> ${note || '—'}</div>
+            ${metaHtml}
           </div>
         </div>
         <div class="wcof-actions" style="grid-column:2 / 6">${actionButtons(o)}</div>
