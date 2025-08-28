@@ -104,22 +104,20 @@
                 });
         }
 
-        function placeMarker(lat, lon, resolve){
+        function placeMarker(lat, lon){
             var latlng = Leaflet.latLng(lat, lon);
             if(!marker){
                 marker = Leaflet.marker(latlng, {draggable:false}).addTo(map);
                 marker.on('dragend', function(e){
-                    if(!editing){
-                        reverseAndFill(e.target.getLatLng());
-                    }
+                    reverseAndFill(e.target.getLatLng());
+                    marker.dragging.disable();
+                    editing = false;
                 });
             }else{
                 marker.setLatLng(latlng);
             }
             map.setView(latlng, 16);
-            if(resolve !== false){
-                reverseAndFill(latlng);
-            }
+            reverseAndFill(latlng);
         }
 
         function searchAddress(){
@@ -169,25 +167,11 @@
 
         map.on('click', function(e){
             if(editing){
-                placeMarker(e.latlng.lat, e.latlng.lng, false);
-            }
-        });
-
-        var confirmBtn = document.createElement('button');
-        confirmBtn.type = 'button';
-        confirmBtn.id = 'wcof-confirm-marker';
-        confirmBtn.textContent = 'Confirm marker';
-        confirmBtn.style.display = 'none';
-        confirmBtn.style.marginBottom = '10px';
-        mapEl.parentNode.insertBefore(confirmBtn, mapEl);
-
-        confirmBtn.addEventListener('click', function(e){
-            e.preventDefault();
-            editing = false;
-            confirmBtn.style.display = 'none';
-            if(marker){
-                marker.dragging.disable();
-                reverseAndFill(marker.getLatLng());
+                placeMarker(e.latlng.lat, e.latlng.lng);
+                if(marker){
+                    marker.dragging.disable();
+                }
+                editing = false;
             }
         });
 
@@ -202,7 +186,6 @@
                 if(resolvedInput) resolvedInput.value='';
                 if(coordInput) coordInput.value='';
                 if(marker) marker.dragging.enable();
-                confirmBtn.style.display = 'block';
             });
         }
 
