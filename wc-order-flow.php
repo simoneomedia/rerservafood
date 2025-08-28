@@ -109,6 +109,10 @@ final class WCOF_Plugin {
         add_action('woocommerce_checkout_update_order_meta', [$this,'save_delivery_address']);
         add_filter('woocommerce_checkout_fields', [$this,'hide_billing_fields'], 999);
 
+        add_action('woocommerce_admin_order_data_after_billing_address', [$this,'display_delivery_address_admin']);
+        add_action('woocommerce_order_details_after_customer_details',   [$this,'display_delivery_address_front']);
+        add_filter('woocommerce_email_order_meta_fields',               [$this,'email_delivery_address_meta'], 10, 3);
+
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
         add_action('woocommerce_order_status_processing',           [$this,'push_approved'], 20);
@@ -950,6 +954,51 @@ final class WCOF_Plugin {
             }
         }
     }
+
+    public function display_delivery_address_admin($order){
+        $typed    = get_post_meta($order->get_id(), '_wcof_delivery_address', true);
+        $resolved = get_post_meta($order->get_id(), '_wcof_delivery_resolved', true);
+        if($typed){
+            echo '<p><strong>'.esc_html__('Address','wc-order-flow').':</strong> '.esc_html($typed).'</p>';
+        }
+        if($resolved){
+            echo '<p><strong>'.esc_html__('Map address','wc-order-flow').':</strong> '.esc_html($resolved).'</p>';
+        }
+    }
+
+    public function display_delivery_address_front($order){
+        $typed    = $order->get_meta('_wcof_delivery_address');
+        $resolved = $order->get_meta('_wcof_delivery_resolved');
+        if(!$typed && !$resolved) return;
+        echo '<section class="woocommerce-order-delivery-address">';
+        echo '<h2>'.esc_html__('Delivery address','wc-order-flow').'</h2>';
+        if($typed){
+            echo '<p><strong>'.esc_html__('Address','wc-order-flow').':</strong> '.esc_html($typed).'</p>';
+        }
+        if($resolved){
+            echo '<p><strong>'.esc_html__('Map address','wc-order-flow').':</strong> '.esc_html($resolved).'</p>';
+        }
+        echo '</section>';
+    }
+
+    public function email_delivery_address_meta($fields, $sent_to_admin, $order){
+        $typed    = $order->get_meta('_wcof_delivery_address');
+        $resolved = $order->get_meta('_wcof_delivery_resolved');
+        if($typed){
+            $fields['wcof_delivery_address'] = [
+                'label' => __('Address','wc-order-flow'),
+                'value' => $typed,
+            ];
+        }
+        if($resolved){
+            $fields['wcof_delivery_resolved'] = [
+                'label' => __('Map address','wc-order-flow'),
+                'value' => $resolved,
+            ];
+        }
+        return $fields;
+    }
+
     public function settings_page(){
         $s=$this->settings(); ?>
         <div class="wrap">
