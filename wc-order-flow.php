@@ -1014,12 +1014,8 @@ final class WCOF_Plugin {
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
         $address  = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
-        $valid    = isset($_POST['wcof_delivery_valid']) ? sanitize_text_field($_POST['wcof_delivery_valid']) : '';
         $coords   = isset($_POST['wcof_delivery_coords']) ? sanitize_text_field($_POST['wcof_delivery_coords']) : '';
-        if($valid !== '1'){
-            wc_add_notice(__('Please confirm a valid address before paying.','wc-order-flow'), 'error');
-            return;
-        }elseif($address===''){
+        if($address===''){
             wc_add_notice(__('Please enter a delivery address.','wc-order-flow'), 'error');
         }elseif($coords===''){
             wc_add_notice(__('Please select a valid address from the map.','wc-order-flow'), 'error');
