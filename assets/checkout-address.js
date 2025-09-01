@@ -163,7 +163,10 @@
             var town = townInput.value.trim();
             var addr = addrInput.value.trim();
             if(town.length < 2 || addr.length < 3) return;
-            var q = addr + ', ' + town;
+            // Nominatim performs better when the town is part of the search
+            // string separated by a space rather than a comma. Combine the two
+            // inputs accordingly so the geocoder receives a single query.
+            var q = addr + ' ' + town;
             return fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
                 .then(function(r){ return r.json(); })
                 .then(function(data){
