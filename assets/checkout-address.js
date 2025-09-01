@@ -40,8 +40,9 @@
 
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var get = function(id){ return document.getElementById(id); };
-        var input = get('wcof_delivery_address');
-        if(!input) return;
+        var townInput = get('wcof_delivery_town');
+        var addrInput = get('wcof_delivery_address');
+        if(!townInput || !addrInput) return;
         var errorEl = document.getElementById('wcof-delivery-error');
         var dragLink = document.getElementById('wcof-move-marker');
         var mapEl = document.getElementById('wcof-delivery-map');
@@ -89,9 +90,23 @@
             }
         }
 
-        // Always show a world view without restricting map bounds. Postal code
-        // limits are checked only after the user selects an address.
+        // Default view. Adjust later if postal codes provide a region.
         map.setView([0, 0], 2);
+        if(allowed.length){
+            fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode='+encodeURIComponent(allowed[0]))
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if(Array.isArray(d) && d[0]){
+                        var item = d[0];
+                        if(item.boundingbox){
+                            var bb = item.boundingbox.map(parseFloat);
+                            map.fitBounds([[bb[0], bb[2]], [bb[1], bb[3]]]);
+                        }else if(item.lat && item.lon){
+                            map.setView([parseFloat(item.lat), parseFloat(item.lon)], 12);
+                        }
+                    }
+                }).catch(function(){});
+        }
 
         function reverseAndFill(latlng){
             var validInput = get('wcof_delivery_valid');
@@ -145,8 +160,10 @@
         }
 
         function searchAddress(){
-            var q = input.value;
-            if(q.length < 3) return;
+            var town = townInput.value.trim();
+            var addr = addrInput.value.trim();
+            if(town.length < 2 || addr.length < 3) return;
+            var q = addr + ', ' + town;
             return fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q='+encodeURIComponent(q))
                 .then(function(r){ return r.json(); })
                 .then(function(data){
@@ -168,24 +185,29 @@
                 });
         }
 
-        input.addEventListener('input', function(){
+        function resetState(){
             var validInput = get('wcof_delivery_valid');
             var resolvedInput = get('wcof_delivery_resolved');
             if(validInput) validInput.value='';
             if(resolvedInput) resolvedInput.value='';
             hideError();
             toggleQuickPayButtons(false);
-        });
-        input.addEventListener('change', searchAddress);
-        input.addEventListener('keydown', function(e){
-            if(e.key === 'Enter'){
-                e.preventDefault();
-                searchAddress();
-            }
+        }
+        [townInput, addrInput].forEach(function(el){
+            el.addEventListener('input', resetState);
+            el.addEventListener('change', function(){
+                if(townInput.value && addrInput.value){ searchAddress(); }
+            });
+            el.addEventListener('keydown', function(e){
+                if(e.key === 'Enter'){
+                    e.preventDefault();
+                    if(townInput.value && addrInput.value){ searchAddress(); }
+                }
+            });
         });
 
-        var valueObserver = new MutationObserver(function(mutations){
-            if(input.value && input.value.trim() !== ''){
+        var valueObserver = new MutationObserver(function(){
+            if(townInput.value && addrInput.value){
                 var result = searchAddress();
                 if(result && typeof result.then === 'function'){
                     result.then(function(){ valueObserver.disconnect(); });
@@ -194,7 +216,8 @@
                 }
             }
         });
-        valueObserver.observe(input, {attributes:true, attributeFilter:['value']});
+        valueObserver.observe(townInput, {attributes:true, attributeFilter:['value']});
+        valueObserver.observe(addrInput, {attributes:true, attributeFilter:['value']});
 
         map.on('click', function(e){
             if(editing){

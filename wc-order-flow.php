@@ -954,18 +954,25 @@ final class WCOF_Plugin {
         if( !$checkout instanceof WC_Checkout ){
             $checkout = WC()->checkout();
         }
-        $value = '';
+        $addr_value = '';
+        $town_value = '';
         if( $checkout && method_exists($checkout, 'get_value') ){
-            $value = $checkout->get_value('wcof_delivery_address');
+            $addr_value = $checkout->get_value('wcof_delivery_address');
+            $town_value = $checkout->get_value('wcof_delivery_town');
         }
         echo '<div id="wcof-checkout-address">';
+        woocommerce_form_field('wcof_delivery_town', [
+            'type'     => 'text',
+            'class'    => [ 'form-row-first' ],
+            'required' => true,
+            'label'    => __('Town','wc-order-flow'),
+        ], $town_value);
         woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
-            'class'    => [ 'form-row-wide' ],
+            'class'    => [ 'form-row-last' ],
             'required' => true,
-
             'label'    => __('Address','wc-order-flow'),
-        ], $value);
+        ], $addr_value);
         // Error message container shown when the typed address is
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
@@ -986,8 +993,8 @@ final class WCOF_Plugin {
     }
 
     public function hide_billing_fields($fields){
-        // Hide unused address fields but keep city, postcode and phone visible
-        $base = ['first_name','last_name','company','address_1','address_2','state','country','phone'];
+        // Hide unused address fields but keep postcode and phone visible
+        $base = ['first_name','last_name','company','address_1','address_2','city','state','country','phone'];
         foreach(['billing','shipping'] as $section){
             foreach($base as $part){
                 $key = $section . '_' . $part;
@@ -1013,9 +1020,12 @@ final class WCOF_Plugin {
     public function validate_checkout_address(){
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
+        $town     = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
         $address  = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
         $coords   = isset($_POST['wcof_delivery_coords']) ? sanitize_text_field($_POST['wcof_delivery_coords']) : '';
-        if($address===''){
+        if($town===''){
+            wc_add_notice(__('Please enter a town.','wc-order-flow'), 'error');
+        }elseif($address===''){
             wc_add_notice(__('Please enter a delivery address.','wc-order-flow'), 'error');
         }elseif($coords===''){
             wc_add_notice(__('Please select a valid address from the map.','wc-order-flow'), 'error');
@@ -1025,11 +1035,14 @@ final class WCOF_Plugin {
     }
 
     public function save_delivery_address($order_id){
-        if(isset($_POST['wcof_delivery_address'])){
-            $addr = sanitize_text_field($_POST['wcof_delivery_address']);
-            if($addr !== ''){
-                update_post_meta($order_id, '_wcof_delivery_address', $addr);
-            }
+        $town = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
+        $addr = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
+        if($town !== ''){
+            update_post_meta($order_id, '_wcof_delivery_town', $town);
+        }
+        if($addr !== ''){
+            $full = $town ? $addr . ', ' . $town : $addr;
+            update_post_meta($order_id, '_wcof_delivery_address', $full);
         }
         if(isset($_POST['wcof_delivery_resolved'])){
             $resolved = sanitize_text_field($_POST['wcof_delivery_resolved']);
