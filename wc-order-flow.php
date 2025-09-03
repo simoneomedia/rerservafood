@@ -980,7 +980,8 @@ final class WCOF_Plugin {
                 $full = $o->get_meta('_wcof_delivery_address');
                 $resolved = $o->get_meta('_wcof_delivery_resolved');
                 $coords = $o->get_meta('_wcof_delivery_coords');
-                if(!$town || !$full || !$coords) continue;
+                // Allow orders without stored coordinates to prefill town and address
+                if(!$town || !$full) continue;
                 $addr_only = $full;
                 $suffix = ', ' . $town;
                 if(substr($full, -strlen($suffix)) === $suffix){
@@ -992,7 +993,7 @@ final class WCOF_Plugin {
                         'town'     => $town,
                         'address'  => $addr_only,
                         'resolved' => $resolved ? $resolved : $full,
-                        'coords'   => $coords,
+                        'coords'   => $coords ? $coords : '',
                     ];
                 }
             }
