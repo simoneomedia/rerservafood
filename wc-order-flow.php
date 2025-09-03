@@ -940,6 +940,7 @@ final class WCOF_Plugin {
         if( !function_exists('is_checkout') || !is_checkout() ) return;
         $codes = $this->delivery_postal_codes();
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
+        wp_enqueue_style('wcof-checkout', plugins_url('assets/checkout.css', __FILE__), [], '1.0');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
         wp_enqueue_script('wcof-checkout-address', plugins_url('assets/checkout-address.js', __FILE__), ['leaflet'], '1.0', true);
         wp_localize_script('wcof-checkout-address', 'wcofCheckoutAddress', [
