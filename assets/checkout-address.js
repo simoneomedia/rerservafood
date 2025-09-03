@@ -46,6 +46,11 @@
         var errorEl = document.getElementById('wcof-delivery-error');
         var dragLink = document.getElementById('wcof-move-marker');
         var mapEl = document.getElementById('wcof-delivery-map');
+        var resolvedInput = get('wcof_delivery_resolved');
+        var coordInput = get('wcof_delivery_coords');
+        var validInput = get('wcof_delivery_valid');
+        var summaryEl = document.getElementById('wcof-resolved-display');
+        var addressSelect = document.getElementById('wcof-address-select');
         if(!mapEl) return;
         var map = Leaflet.map(mapEl);
         Leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -109,11 +114,7 @@
         }
 
         function reverseAndFill(latlng){
-            var validInput = get('wcof_delivery_valid');
-            var resolvedInput = get('wcof_delivery_resolved');
-            var coordInput = get('wcof_delivery_coords');
             if(coordInput) coordInput.value = latlng.lat + ',' + latlng.lng;
-            alert('Marker coordinates: ' + latlng.lat + ', ' + latlng.lng);
             fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
                 .then(function(r){return r.json();})
                 .then(function(data){
@@ -123,6 +124,7 @@
                         showError('Address not in delivery area or not found');
                         if(validInput) validInput.value='';
                         if(resolvedInput) resolvedInput.value='';
+                        if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
                         document.querySelector('#billing_state').value = '';
                         document.querySelector('#shipping_state').value = '';
                         toggleQuickPayButtons(false);
@@ -131,6 +133,10 @@
                     hideError();
                     var full = data.display_name || '';
                     if(resolvedInput) resolvedInput.value = full;
+                    if(summaryEl){
+                        summaryEl.textContent = full + ' (' + latlng.lat + ',' + latlng.lng + ')';
+                        summaryEl.style.display = 'block';
+                    }
                     document.querySelector('#billing_postcode').value = pc;
                     document.querySelector('#billing_address_1').value = full;
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
@@ -189,10 +195,9 @@
         }
 
         function resetState(){
-            var validInput = get('wcof_delivery_valid');
-            var resolvedInput = get('wcof_delivery_resolved');
             if(validInput) validInput.value='';
             if(resolvedInput) resolvedInput.value='';
+            if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
             hideError();
             toggleQuickPayButtons(false);
         }
@@ -236,13 +241,44 @@
             dragLink.addEventListener('click', function(e){
                 e.preventDefault();
                 editing = true;
-                var validInput = get('wcof_delivery_valid');
-                var resolvedInput = get('wcof_delivery_resolved');
                 if(validInput) validInput.value='';
                 if(resolvedInput) resolvedInput.value='';
+                if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
                 if(marker) marker.dragging.enable();
                 toggleQuickPayButtons(false);
             });
+        }
+
+        if(addressSelect){
+            addressSelect.addEventListener('change', function(){
+                var opt = addressSelect.options[addressSelect.selectedIndex];
+                if(!opt) return;
+                townInput.value = opt.getAttribute('data-town') || '';
+                addrInput.value = opt.getAttribute('data-address') || '';
+                if(resolvedInput) resolvedInput.value = opt.getAttribute('data-resolved') || '';
+                if(coordInput) coordInput.value = opt.getAttribute('data-coords') || '';
+                var r = opt.getAttribute('data-resolved') || '';
+                var c = opt.getAttribute('data-coords') || '';
+                if(summaryEl){
+                    if(r && c){ summaryEl.textContent = r + ' (' + c + ')'; summaryEl.style.display='block'; }
+                    else { summaryEl.textContent=''; summaryEl.style.display='none'; }
+                }
+                if(c){
+                    var parts = c.split(',');
+                    if(parts.length === 2){ placeMarker(parts[0], parts[1]); }
+                }
+            });
+        }
+
+        if(coordInput && coordInput.value){
+            var parts = coordInput.value.split(',');
+            if(parts.length === 2){
+                placeMarker(parts[0], parts[1]);
+                if(resolvedInput && resolvedInput.value && summaryEl){
+                    summaryEl.textContent = resolvedInput.value + ' (' + coordInput.value + ')';
+                    summaryEl.style.display = 'block';
+                }
+            }
         }
 
         var heading=document.querySelector('.woocommerce-billing-fields > h3');

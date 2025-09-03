@@ -956,10 +956,56 @@ final class WCOF_Plugin {
         }
         $addr_value = '';
         $town_value = '';
+        $resolved_value = '';
+        $coords_value = '';
         if( $checkout && method_exists($checkout, 'get_value') ){
-            $addr_value = $checkout->get_value('wcof_delivery_address');
-            $town_value = $checkout->get_value('wcof_delivery_town');
+            $addr_value    = $checkout->get_value('wcof_delivery_address');
+            $town_value    = $checkout->get_value('wcof_delivery_town');
+            $resolved_value = $checkout->get_value('wcof_delivery_resolved');
+            $coords_value   = $checkout->get_value('wcof_delivery_coords');
         }
+
+        $prev_addresses = [];
+        if( is_user_logged_in() ){
+            $customer_id = get_current_user_id();
+            $orders = wc_get_orders([
+                'customer_id' => $customer_id,
+                'orderby'     => 'date',
+                'order'       => 'DESC',
+                'limit'       => -1,
+            ]);
+            foreach($orders as $o){
+                if( !$o instanceof WC_Order ) continue;
+                $town = $o->get_meta('_wcof_delivery_town');
+                $full = $o->get_meta('_wcof_delivery_address');
+                $resolved = $o->get_meta('_wcof_delivery_resolved');
+                $coords = $o->get_meta('_wcof_delivery_coords');
+                if(!$town || !$full || !$coords) continue;
+                $addr_only = $full;
+                $suffix = ', ' . $town;
+                if(substr($full, -strlen($suffix)) === $suffix){
+                    $addr_only = substr($full, 0, -strlen($suffix));
+                }
+                $key = md5($town.'|'.$addr_only.'|'.$coords);
+                if(!isset($prev_addresses[$key])){
+                    $prev_addresses[$key] = [
+                        'town'     => $town,
+                        'address'  => $addr_only,
+                        'resolved' => $resolved ? $resolved : $full,
+                        'coords'   => $coords,
+                    ];
+                }
+            }
+            $prev_addresses = array_values($prev_addresses);
+        }
+
+        if($addr_value === '' && $town_value === '' && $resolved_value === '' && $coords_value === '' && !empty($prev_addresses)){
+            $addr_value    = $prev_addresses[0]['address'];
+            $town_value    = $prev_addresses[0]['town'];
+            $resolved_value = $prev_addresses[0]['resolved'];
+            $coords_value   = $prev_addresses[0]['coords'];
+        }
+
         echo '<div id="wcof-checkout-address">';
         woocommerce_form_field('wcof_delivery_town', [
             'type'     => 'text',
@@ -976,16 +1022,29 @@ final class WCOF_Plugin {
         // Error message container shown when the typed address is
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
-        // Hidden field filled with the resolved address from the map.
-        echo '<p><label for="wcof_delivery_resolved">'.esc_html__('Resolved address','wc-order-flow').'</label>\n'
-            .'<input type="text" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="" style="width:100%" /></p>';
+        // Display resolved address and coordinates once found.
+        $summary = '';
+        if($resolved_value && $coords_value){
+            $summary = esc_html($resolved_value) . ' (' . esc_html($coords_value) . ')';
+        }
+        echo '<p id="wcof-resolved-display" style="margin-top:4px;'.($summary ? '' : 'display:none;').'">'.$summary.'</p>';
+        if( count($prev_addresses) > 1 ){
+            echo '<p><label for="wcof-address-select">'.esc_html__('Select from your addresses','wc-order-flow').'</label>';
+            echo '<select id="wcof-address-select" style="width:100%">';
+            foreach($prev_addresses as $i => $entry){
+                $sel = $i === 0 ? ' selected="selected"' : '';
+                echo '<option value="'.esc_attr($i).'" data-town="'.esc_attr($entry['town']).'" data-address="'.esc_attr($entry['address']).'" data-resolved="'.esc_attr($entry['resolved']).'" data-coords="'.esc_attr($entry['coords']).'"'.$sel.'>'.esc_html($entry['resolved']).'</option>';
+            }
+            echo '</select></p>';
+        }
+        // Hidden fields to store resolved address and coordinates.
+        echo '<input type="hidden" id="wcof_delivery_resolved" name="wcof_delivery_resolved" value="'.esc_attr($resolved_value).'" />';
         // Hidden field used to prevent checkout unless a valid address
         // has been selected. It is filled via JS when the marker resolves
         // to an allowed postal code.
-        echo '<input type="text" id="wcof_delivery_valid" name="wcof_delivery_valid" value="" style="position:absolute;left:-9999px;width:1px;height:1px;" />';
+        echo '<input type="hidden" id="wcof_delivery_valid" name="wcof_delivery_valid" value="'.($coords_value ? '1' : '').'" />';
         // Hidden field that stores the marker coordinates.
-        echo '<p><label for="wcof_delivery_coords">'.esc_html__('Coordinates','wc-order-flow').'</label>\n'
-            .'<input type="text" id="wcof_delivery_coords" name="wcof_delivery_coords" value="" required style="width:100%" /></p>';
+        echo '<input type="hidden" id="wcof_delivery_coords" name="wcof_delivery_coords" value="'.esc_attr($coords_value).'" />';
         // Allow users to correct the marker position manually.
         echo '<p class="wcof-move-marker"><a href="#" id="wcof-move-marker">'.esc_html__('Marker is wrong / let me set the marker','wc-order-flow').'</a></p>';
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
