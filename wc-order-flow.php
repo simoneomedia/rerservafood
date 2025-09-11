@@ -973,6 +973,7 @@ final class WCOF_Plugin {
                 'orderby'     => 'date',
                 'order'       => 'DESC',
                 'limit'       => -1,
+                'status'      => 'completed',
             ]);
             foreach($orders as $o){
                 if( !$o instanceof WC_Order ) continue;
@@ -1029,7 +1030,7 @@ final class WCOF_Plugin {
             $summary = esc_html($resolved_value) . ' (' . esc_html($coords_value) . ')';
         }
         echo '<p id="wcof-resolved-display" style="margin-top:4px;'.($summary ? '' : 'display:none;').'">'.$summary.'</p>';
-        if( count($prev_addresses) > 1 ){
+        if( count($prev_addresses) > 0 ){
             echo '<p><label for="wcof-address-select">'.esc_html__('Select from your addresses','wc-order-flow').'</label>';
             echo '<select id="wcof-address-select" style="width:100%">';
             foreach($prev_addresses as $i => $entry){
