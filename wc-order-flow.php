@@ -1004,8 +1004,10 @@ final class WCOF_Plugin {
                 $prev_addresses = array_values($prev_addresses);
                 if(empty($prev_addresses)){
                     $last_order = $orders[0];
-                    $last_town = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_town') : '';
-                    $last_addr = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_address') : '';
+                    $last_town     = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_town') : '';
+                    $last_addr     = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_address') : '';
+                    $last_resolved = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_resolved') : '';
+                    $last_coords   = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_coords') : '';
                     wc_print_notice(
                         sprintf(
                             __('The user has orders but without valid address metafield. Last order meta: %1$s, %2$s','wc-order-flow'),
@@ -1014,6 +1016,13 @@ final class WCOF_Plugin {
                         ),
                         'notice'
                     );
+                    echo '<pre class="wcof-debug-meta">' . esc_html(sprintf(
+                        "_wcof_delivery_town: %s\n_wcof_delivery_address: %s\n_wcof_delivery_resolved: %s\n_wcof_delivery_coords: %s",
+                        $last_town,
+                        $last_addr,
+                        $last_resolved,
+                        $last_coords
+                    )) . '</pre>';
                 }
             }
         }
