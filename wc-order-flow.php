@@ -978,13 +978,30 @@ final class WCOF_Plugin {
             if(empty($orders)){
                 wc_print_notice(__('The user does not have orders','wc-order-flow'), 'notice');
             }else{
+                $order_ids = [];
                 foreach($orders as $o){
                     if( !$o instanceof WC_Order ) continue;
-                    $town = $o->get_meta('_wcof_delivery_town');
-                    $full = $o->get_meta('_wcof_delivery_address');
+                    $order_ids[] = '#' . $o->get_id();
+                    $town     = $o->get_meta('_wcof_delivery_town');
+                    $full     = $o->get_meta('_wcof_delivery_address');
                     $resolved = $o->get_meta('_wcof_delivery_resolved');
-                    $coords = $o->get_meta('_wcof_delivery_coords');
-                    // Allow orders without stored coordinates to prefill town and address
+                    $coords   = $o->get_meta('_wcof_delivery_coords');
+                    // Allow orders without stored coordinates to prefill town and address.
+                    if(!$town){
+                        $town = $o->get_shipping_city();
+                        if(!$town) $town = $o->get_billing_city();
+                    }
+                    if(!$full){
+                        $parts = [ $o->get_shipping_address_1(), $o->get_shipping_address_2(), $o->get_shipping_postcode() ];
+                        $full  = trim(implode(', ', array_filter($parts)));
+                        if(!$full){
+                            $parts = [ $o->get_billing_address_1(), $o->get_billing_address_2(), $o->get_billing_postcode() ];
+                            $full  = trim(implode(', ', array_filter($parts)));
+                        }
+                    }
+                    if(!$resolved && $full && $town){
+                        $resolved = $full . ', ' . $town;
+                    }
                     if(!$town || !$full) continue;
                     $addr_only = $full;
                     $suffix = ', ' . $town;
@@ -1008,16 +1025,19 @@ final class WCOF_Plugin {
                     $last_addr     = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_address') : '';
                     $last_resolved = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_resolved') : '';
                     $last_coords   = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_coords') : '';
+                    $ids_str = implode(', ', array_slice($order_ids, 0, 3));
                     wc_print_notice(
                         sprintf(
-                            __('The user has orders but without valid address metafield. Last order meta: %1$s, %2$s','wc-order-flow'),
+                            __('The user has orders (%1$s) but without valid address metafield. Last order meta: %2$s, %3$s','wc-order-flow'),
+                            esc_html($ids_str),
                             esc_html($last_town),
                             esc_html($last_addr)
                         ),
                         'notice'
                     );
                     echo '<pre class="wcof-debug-meta">' . esc_html(sprintf(
-                        "_wcof_delivery_town: %s\n_wcof_delivery_address: %s\n_wcof_delivery_resolved: %s\n_wcof_delivery_coords: %s",
+                        "Order ID: %s\n_wcof_delivery_town: %s\n_wcof_delivery_address: %s\n_wcof_delivery_resolved: %s\n_wcof_delivery_coords: %s",
+                        $last_order ? $last_order->get_id() : '',
                         $last_town,
                         $last_addr,
                         $last_resolved,
