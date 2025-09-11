@@ -418,9 +418,9 @@ final class WCOF_Plugin {
                     $arrival=$arrival_ts?date_i18n('H:i',$arrival_ts):null;
                     $items=[]; foreach($o->get_items() as $it){ $items[]=['name'=>$it->get_name(),'qty'=>(int)$it->get_quantity()]; }
                     $total_raw = html_entity_decode( wp_strip_all_tags($o->get_formatted_order_total()), ENT_QUOTES, 'UTF-8' );
-                    $resolved = get_post_meta($o->get_id(), '_wcof_delivery_resolved', true);
-                    $typed    = get_post_meta($o->get_id(), '_wcof_delivery_address', true);
-                    $coords   = get_post_meta($o->get_id(), '_wcof_delivery_coords', true);
+                    $resolved = $o->get_meta('_wcof_delivery_resolved');
+                    $typed    = $o->get_meta('_wcof_delivery_address');
+                    $coords   = $o->get_meta('_wcof_delivery_coords');
                     $address  = $resolved;
                     if(!$address){
                         $address = trim(implode(', ', array_filter([
@@ -681,9 +681,9 @@ final class WCOF_Plugin {
             $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
             $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej')));
             $status_name = $this->status_name($status);
-            $typed    = get_post_meta($o->get_id(), '_wcof_delivery_address', true);
-            $resolved = get_post_meta($o->get_id(), '_wcof_delivery_resolved', true);
-            $coords   = get_post_meta($o->get_id(), '_wcof_delivery_coords', true);
+            $typed    = $o->get_meta('_wcof_delivery_address');
+            $resolved = $o->get_meta('_wcof_delivery_resolved');
+            $coords   = $o->get_meta('_wcof_delivery_coords');
             $address  = $resolved;
             if(!$address){
                 $address = trim(implode(', ', array_filter([
@@ -1122,33 +1122,36 @@ final class WCOF_Plugin {
     }
 
     public function save_delivery_address($order_id){
+        $order = wc_get_order($order_id);
+        if(!$order) return;
         $town = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
         $addr = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
         if($town !== ''){
-            update_post_meta($order_id, '_wcof_delivery_town', $town);
+            $order->update_meta_data('_wcof_delivery_town', $town);
         }
         if($addr !== ''){
             $full = $town ? $addr . ', ' . $town : $addr;
-            update_post_meta($order_id, '_wcof_delivery_address', $full);
+            $order->update_meta_data('_wcof_delivery_address', $full);
         }
         if(isset($_POST['wcof_delivery_resolved'])){
             $resolved = sanitize_text_field($_POST['wcof_delivery_resolved']);
             if($resolved !== ''){
-                update_post_meta($order_id, '_wcof_delivery_resolved', $resolved);
+                $order->update_meta_data('_wcof_delivery_resolved', $resolved);
             }
         }
         if(isset($_POST['wcof_delivery_coords'])){
             $coords = sanitize_text_field($_POST['wcof_delivery_coords']);
             if($coords !== ''){
-                update_post_meta($order_id, '_wcof_delivery_coords', $coords);
+                $order->update_meta_data('_wcof_delivery_coords', $coords);
             }
         }
+        $order->save();
     }
 
     public function display_delivery_address_admin($order){
-        $typed    = get_post_meta($order->get_id(), '_wcof_delivery_address', true);
-        $resolved = get_post_meta($order->get_id(), '_wcof_delivery_resolved', true);
-        $coords   = get_post_meta($order->get_id(), '_wcof_delivery_coords', true);
+        $typed    = $order->get_meta('_wcof_delivery_address');
+        $resolved = $order->get_meta('_wcof_delivery_resolved');
+        $coords   = $order->get_meta('_wcof_delivery_coords');
         if($typed){
             echo '<p><strong>'.esc_html__('Address','wc-order-flow').':</strong> '.esc_html($typed).'</p>';
         }
