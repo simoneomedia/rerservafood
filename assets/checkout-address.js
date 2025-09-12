@@ -39,9 +39,11 @@
         toggleQuickPayButtons(false);
 
         var allowed = wcofCheckoutAddress.postalCodes || [];
+        var store = wcofCheckoutAddress.storeAddress || '';
         var get = function(id){ return document.getElementById(id); };
         var townInput = get('wcof_delivery_town');
         var addrInput = get('wcof_delivery_address');
+        var doorInput = get('wcof_delivery_door');
         if(!townInput || !addrInput) return;
         var errorEl = document.getElementById('wcof-delivery-error');
         var dragLink = document.getElementById('wcof-move-marker');
@@ -96,9 +98,23 @@
             }
         }
 
-        // Default view. Adjust later if postal codes provide a region.
+        // Default view. Adjust later using shop address or allowed postal codes.
         map.setView([0, 0], 2);
-        if(allowed.length){
+        if(store){
+            fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(store))
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if(Array.isArray(d) && d[0]){
+                        var item = d[0];
+                        if(item.boundingbox){
+                            var bb = item.boundingbox.map(parseFloat);
+                            map.fitBounds([[bb[0], bb[2]], [bb[1], bb[3]]]);
+                        }else if(item.lat && item.lon){
+                            map.setView([parseFloat(item.lat), parseFloat(item.lon)], 12);
+                        }
+                    }
+                }).catch(function(){});
+        }else if(allowed.length){
             fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode='+encodeURIComponent(allowed[0]))
                 .then(function(r){ return r.json(); })
                 .then(function(d){
@@ -257,8 +273,13 @@
                 if(!opt) return;
                 var town = opt.getAttribute('data-town') || '';
                 var address = opt.getAttribute('data-address') || '';
+                var door = opt.getAttribute('data-door') || '';
                 townInput.value = town; townInput.setAttribute('value', town);
                 addrInput.value = address; addrInput.setAttribute('value', address);
+                if(doorInput){
+                    doorInput.value = door; doorInput.setAttribute('value', door);
+                    doorInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
                 if(resolvedInput) resolvedInput.value = opt.getAttribute('data-resolved') || '';
                 if(coordInput) coordInput.value = opt.getAttribute('data-coords') || '';
                 var r = opt.getAttribute('data-resolved') || '';
