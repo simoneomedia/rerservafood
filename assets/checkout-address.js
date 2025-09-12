@@ -257,8 +257,8 @@
                 if(!opt) return;
                 var town = opt.getAttribute('data-town') || '';
                 var address = opt.getAttribute('data-address') || '';
-                townInput.value = town;
-                addrInput.value = address;
+                townInput.value = town; townInput.setAttribute('value', town);
+                addrInput.value = address; addrInput.setAttribute('value', address);
                 if(resolvedInput) resolvedInput.value = opt.getAttribute('data-resolved') || '';
                 if(coordInput) coordInput.value = opt.getAttribute('data-coords') || '';
                 var r = opt.getAttribute('data-resolved') || '';
@@ -268,6 +268,7 @@
                     else { summaryEl.textContent=''; summaryEl.style.display='none'; }
                 }
                 if(c){
+                    suppressSearch = true;
                     var parts = c.split(',');
                     if(parts.length === 2){
                         var promise = placeMarker(parts[0], parts[1]);
@@ -277,7 +278,9 @@
                             addrInput.value = address;
                         }
                     }
-                    suppressSearch = true;
+                }else{
+                    // No stored coordinates: resolve via search
+                    searchAddress();
                 }
                 // Ensure WooCommerce and other listeners react to the new values
                 townInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -286,7 +289,7 @@
             });
 
             // Automatically load the most recent address on first render
-            if(addressSelect.options.length && (!validInput || !validInput.value)){
+            if(addressSelect.options.length){
                 addressSelect.dispatchEvent(new Event('change'));
             }
         }
@@ -304,6 +307,9 @@
                     summaryEl.style.display = 'block';
                 }
             }
+        }else if(townInput.value && addrInput.value){
+            // Coordinates not yet known but we have text fields
+            searchAddress();
         }
 
         var heading=document.querySelector('.woocommerce-billing-fields > h3');
