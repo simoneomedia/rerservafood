@@ -939,12 +939,14 @@ final class WCOF_Plugin {
     public function enqueue_checkout_scripts(){
         if( !function_exists('is_checkout') || !is_checkout() ) return;
         $codes = $this->delivery_postal_codes();
+        $store = $this->settings()['address'];
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_style('wcof-checkout', plugins_url('assets/checkout.css', __FILE__), [], '1.0');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
         wp_enqueue_script('wcof-checkout-address', plugins_url('assets/checkout-address.js', __FILE__), ['leaflet'], '1.0', true);
         wp_localize_script('wcof-checkout-address', 'wcofCheckoutAddress', [
-            'postalCodes' => $codes,
+            'postalCodes'  => $codes,
+            'storeAddress' => $store,
         ]);
     }
 
@@ -954,13 +956,15 @@ final class WCOF_Plugin {
         if( !$checkout instanceof WC_Checkout ){
             $checkout = WC()->checkout();
         }
-        $addr_value = '';
-        $town_value = '';
+        $addr_value  = '';
+        $town_value  = '';
+        $door_value  = '';
         $resolved_value = '';
-        $coords_value = '';
+        $coords_value   = '';
         if( $checkout && method_exists($checkout, 'get_value') ){
             $addr_value    = $checkout->get_value('wcof_delivery_address');
             $town_value    = $checkout->get_value('wcof_delivery_town');
+            $door_value    = $checkout->get_value('wcof_delivery_door');
             $resolved_value = $checkout->get_value('wcof_delivery_resolved');
             $coords_value   = $checkout->get_value('wcof_delivery_coords');
         }
@@ -984,6 +988,7 @@ final class WCOF_Plugin {
                     $order_ids[] = '#' . $o->get_id();
                     $town     = $o->get_meta('_wcof_delivery_town');
                     $full     = $o->get_meta('_wcof_delivery_address');
+                    $door     = $o->get_meta('_wcof_delivery_door');
                     $resolved = $o->get_meta('_wcof_delivery_resolved');
                     $coords   = $o->get_meta('_wcof_delivery_coords');
                     // Allow orders without stored coordinates to prefill town and address.
@@ -1008,11 +1013,15 @@ final class WCOF_Plugin {
                     if(substr($full, -strlen($suffix)) === $suffix){
                         $addr_only = substr($full, 0, -strlen($suffix));
                     }
-                    $key = md5($town.'|'.$addr_only.'|'.$coords);
+                    if($door && substr($addr_only, -strlen(' '.$door)) === ' '.$door){
+                        $addr_only = substr($addr_only, 0, -strlen(' '.$door));
+                    }
+                    $key = md5($town.'|'.$addr_only.'|'.$door.'|'.$coords);
                     if(!isset($prev_addresses[$key])){
                         $prev_addresses[$key] = [
                             'town'     => $town,
                             'address'  => $addr_only,
+                            'door'     => $door,
                             'resolved' => $resolved ? $resolved : $full,
                             'coords'   => $coords ? $coords : '',
                         ];
@@ -1050,6 +1059,7 @@ final class WCOF_Plugin {
         if($addr_value === '' && $town_value === '' && $resolved_value === '' && $coords_value === '' && !empty($prev_addresses)){
             $addr_value    = $prev_addresses[0]['address'];
             $town_value    = $prev_addresses[0]['town'];
+            $door_value    = isset($prev_addresses[0]['door']) ? $prev_addresses[0]['door'] : '';
             $resolved_value = $prev_addresses[0]['resolved'];
             $coords_value   = $prev_addresses[0]['coords'];
         }
@@ -1067,6 +1077,12 @@ final class WCOF_Plugin {
             'required' => true,
             'label'    => __('Address','wc-order-flow'),
         ], $addr_value);
+        woocommerce_form_field('wcof_delivery_door', [
+            'type'     => 'text',
+            'class'    => [ 'form-row-wide' ],
+            'required' => false,
+            'label'    => __('Apartment or Door #','wc-order-flow'),
+        ], $door_value);
         // Error message container shown when the typed address is
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
@@ -1081,7 +1097,10 @@ final class WCOF_Plugin {
             echo '<select id="wcof-address-select" style="width:100%">';
             foreach($prev_addresses as $i => $entry){
                 $sel = $i === 0 ? ' selected="selected"' : '';
-                echo '<option value="'.esc_attr($i).'" data-town="'.esc_attr($entry['town']).'" data-address="'.esc_attr($entry['address']).'" data-resolved="'.esc_attr($entry['resolved']).'" data-coords="'.esc_attr($entry['coords']).'"'.$sel.'>'.esc_html($entry['resolved']).'</option>';
+                $label = $entry['address'];
+                if( !empty($entry['door']) ) $label .= ' ' . $entry['door'];
+                $label .= ', ' . $entry['town'];
+                echo '<option value="'.esc_attr($i).'" data-town="'.esc_attr($entry['town']).'" data-address="'.esc_attr($entry['address']).'" data-door="'.esc_attr(isset($entry['door'])?$entry['door']:'').'" data-resolved="'.esc_attr($entry['resolved']).'" data-coords="'.esc_attr($entry['coords']).'"'.$sel.'>'.esc_html($label).'</option>';
             }
             echo '</select></p>';
         }
@@ -1146,12 +1165,17 @@ final class WCOF_Plugin {
         if(!$order) return;
         $town = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
         $addr = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
+        $door = isset($_POST['wcof_delivery_door']) ? sanitize_text_field($_POST['wcof_delivery_door']) : '';
         if($town !== ''){
             $order->update_meta_data('_wcof_delivery_town', $town);
         }
         if($addr !== ''){
-            $full = $town ? $addr . ', ' . $town : $addr;
+            $full_addr = trim($addr . ($door ? ' ' . $door : ''));
+            $full = $town ? $full_addr . ', ' . $town : $full_addr;
             $order->update_meta_data('_wcof_delivery_address', $full);
+        }
+        if($door !== ''){
+            $order->update_meta_data('_wcof_delivery_door', $door);
         }
         if(isset($_POST['wcof_delivery_resolved'])){
             $resolved = sanitize_text_field($_POST['wcof_delivery_resolved']);
