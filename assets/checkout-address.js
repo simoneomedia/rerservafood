@@ -116,7 +116,7 @@
 
         function reverseAndFill(latlng){
             if(coordInput) coordInput.value = latlng.lat + ',' + latlng.lng;
-            fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
+            return fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
                 .then(function(r){return r.json();})
                 .then(function(data){
                     var addr = data.address || {};
@@ -163,7 +163,7 @@
                 marker.setLatLng(latlng);
             }
             map.setView(latlng, 16);
-            reverseAndFill(latlng);
+            return reverseAndFill(latlng);
         }
 
         function searchAddress(){
@@ -269,7 +269,14 @@
                 }
                 if(c){
                     var parts = c.split(',');
-                    if(parts.length === 2){ placeMarker(parts[0], parts[1]); }
+                    if(parts.length === 2){
+                        var promise = placeMarker(parts[0], parts[1]);
+                        if(promise && typeof promise.then === 'function'){
+                            promise.then(function(){ addrInput.value = address; });
+                        }else{
+                            addrInput.value = address;
+                        }
+                    }
                     suppressSearch = true;
                 }
                 // Ensure WooCommerce and other listeners react to the new values
@@ -287,7 +294,11 @@
         if(coordInput && coordInput.value){
             var parts = coordInput.value.split(',');
             if(parts.length === 2){
-                placeMarker(parts[0], parts[1]);
+                var typedAddress = addrInput ? addrInput.value : '';
+                var promise = placeMarker(parts[0], parts[1]);
+                if(promise && typeof promise.then === 'function' && typedAddress){
+                    promise.then(function(){ addrInput.value = typedAddress; });
+                }
                 if(resolvedInput && resolvedInput.value && summaryEl){
                     summaryEl.textContent = resolvedInput.value + ' (' + coordInput.value + ')';
                     summaryEl.style.display = 'block';
@@ -301,6 +312,10 @@
         if(ship) ship.style.display='none';
     }
 
-    // Wait for the DOM to be fully loaded before initializing.
-    document.addEventListener('DOMContentLoaded', init);
+    // Initialize immediately if the DOM is already ready, otherwise wait.
+    if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', init);
+    }else{
+        init();
+    }
 })();
