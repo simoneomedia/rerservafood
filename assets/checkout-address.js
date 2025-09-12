@@ -268,6 +268,11 @@
                     if(parts.length === 2){ placeMarker(parts[0], parts[1]); }
                 }
             });
+
+            // Automatically load the most recent address on first render
+            if(addressSelect.options.length && (!validInput || !validInput.value)){
+                addressSelect.dispatchEvent(new Event('change'));
+            }
         }
 
         if(coordInput && coordInput.value){
