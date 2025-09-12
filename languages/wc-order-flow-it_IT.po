@@ -1,0 +1,196 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: wc-order-flow\n"
+"Language: it_IT\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+
+msgid "Out for delivery"
+msgstr "In consegna"
+
+msgid "Out for delivery <span class=\"count\">(%s)</span>"
+msgid_plural "Out for delivery <span class=\"count\">(%s)</span>"
+msgstr[0] "In consegna <span class=\"count\">(%s)</span>"
+msgstr[1] "In consegna <span class=\"count\">(%s)</span>"
+
+msgid "Awaiting approval"
+msgstr "In attesa di approvazione"
+
+msgid "Rejected"
+msgstr "Rifiutato"
+
+msgid "Waiting for approval"
+msgstr "In attesa di approvazione"
+
+msgid "Preparing"
+msgstr "In preparazione"
+
+msgid "Delivering"
+msgstr "In consegna"
+
+msgid "Completed"
+msgstr "Completato"
+
+msgid "Canceled"
+msgstr "Annullato"
+
+msgid "Order awaiting approval."
+msgstr "Ordine in attesa di approvazione."
+
+msgid "Forced: awaiting approval."
+msgstr "Forzato: in attesa di approvazione."
+
+msgid "Unauthorized"
+msgstr "Non autorizzato"
+
+msgid "Order approved. ETA: %d minutes."
+msgstr "Ordine approvato. ETA: %d minuti."
+
+msgid "Order rejected by admin."
+msgstr "Ordine rifiutato dall’amministratore."
+
+msgid "ETA updated to %d minutes."
+msgstr "ETA aggiornata a %d minuti."
+
+msgid "Rider out for delivery."
+msgstr "Rider in consegna."
+
+msgid "Order status (app style)"
+msgstr "Stato ordine (stile app)"
+
+msgid "Waiting time (minutes)"
+msgstr "Tempo di attesa (minuti)"
+
+msgid "Approve"
+msgstr "Approva"
+
+msgid "Reject"
+msgstr "Rifiuta"
+
+msgid "Update ETA"
+msgstr "Aggiorna ETA"
+
+msgid "Mark as out for delivery?"
+msgstr "Segnare come in consegna?"
+
+msgid "Rider out for delivery"
+msgstr "Rider in consegna"
+
+msgid "<strong>Order confirmed.</strong> In preparation. <span class=\"wcof-chip\">Arrival approx. %s</span>"
+msgstr "<strong>Ordine confermato.</strong> In preparazione. <span class=\"wcof-chip\">Arrivo previsto %s</span>"
+
+msgid "Estimated time: %s min"
+msgstr "Tempo stimato: %s min"
+
+msgid "<strong>Rider on the way.</strong> <span class=\"wcof-chip\">Arrival %s</span>"
+msgstr "<strong>Rider in arrivo.</strong> <span class=\"wcof-chip\">Arrivo %s</span>"
+
+msgid "You can follow the status here."
+msgstr "Puoi seguire lo stato qui."
+
+msgid "<strong>Order rejected.</strong>"
+msgstr "<strong>Ordine rifiutato.</strong>"
+
+msgid "Sorry, order rejected."
+msgstr "Spiacenti, ordine rifiutato."
+
+msgid "<strong>Enjoy!</strong> ☺️"
+msgstr "<strong>Buon appetito!</strong> ☺️"
+
+msgid "Waiting for confirmation"
+msgstr "In attesa di conferma"
+
+msgid "Thank you!"
+msgstr "Grazie!"
+
+msgid "We are waiting for admin confirmation…"
+msgstr "Stiamo aspettando la conferma dell'amministratore…"
+
+msgid "New order"
+msgstr "Nuovo ordine"
+
+msgid "Awaiting approval."
+msgstr "In attesa di approvazione."
+
+msgid "Only administrators or riders can view this page."
+msgstr "Solo gli amministratori o i rider possono vedere questa pagina."
+
+msgid "Search dishes or allergens…"
+msgstr "Cerca piatti o allergeni…"
+
+msgid "Close"
+msgstr "Chiudi"
+
+msgid "Ingredients"
+msgstr "Ingredienti"
+
+msgid "Allergens (full text)"
+msgstr "Allergeni (testo completo)"
+
+msgid "Nutritional values (100 g)"
+msgstr "Valori nutrizionali (100 g)"
+
+msgid "Allergens & info"
+msgstr "Allergeni e info"
+
+msgid "Add"
+msgstr "Aggiungi"
+
+msgid "Language"
+msgstr "Lingua"
+
+msgid "Automatic"
+msgstr "Automatico"
+
+msgid "English"
+msgstr "Inglese"
+
+msgid "Spanish"
+msgstr "Spagnolo"
+
+msgid "Italian"
+msgstr "Italiano"
+
+msgid "Opening days"
+msgstr "Giorni di apertura"
+
+msgid "Opening time"
+msgstr "Orario di apertura"
+
+msgid "Store closed"
+msgstr "Negozio chiuso"
+
+msgid "Yes"
+msgstr "Sì"
+
+msgid "Riders see processing"
+msgstr "I rider vedono in lavorazione"
+
+msgid "Enable push"
+msgstr "Abilita push"
+
+msgid "On"
+msgstr "Attivo"
+
+msgid "OneSignal App ID"
+msgstr "ID App OneSignal"
+
+msgid "OneSignal REST API Key"
+msgstr "Chiave API REST OneSignal"
+
+msgid "Notify on"
+msgstr "Notifica"
+
+msgid "Admin"
+msgstr "Admin"
+
+msgid "User"
+msgstr "Utente"
+
+msgid "Approved"
+msgstr "Approvato"
+
+msgid "Rider on the way"
+msgstr "Rider in arrivo"
