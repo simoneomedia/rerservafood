@@ -81,6 +81,7 @@
         var marker = null;
         var lastValid = null;
         var editing = false;
+        var suppressSearch = false;
 
         function showError(msg){
             if(errorEl){
@@ -204,7 +205,7 @@
         [townInput, addrInput].forEach(function(el){
             el.addEventListener('input', resetState);
             el.addEventListener('change', function(){
-                if(townInput.value && addrInput.value){ searchAddress(); }
+                if(!suppressSearch && townInput.value && addrInput.value){ searchAddress(); }
             });
             el.addEventListener('keydown', function(e){
                 if(e.key === 'Enter'){
@@ -215,6 +216,7 @@
         });
 
         var valueObserver = new MutationObserver(function(){
+            if(suppressSearch) return;
             if(townInput.value && addrInput.value){
                 var result = searchAddress();
                 if(result && typeof result.then === 'function'){
@@ -253,8 +255,10 @@
             addressSelect.addEventListener('change', function(){
                 var opt = addressSelect.options[addressSelect.selectedIndex];
                 if(!opt) return;
-                townInput.value = opt.getAttribute('data-town') || '';
-                addrInput.value = opt.getAttribute('data-address') || '';
+                var town = opt.getAttribute('data-town') || '';
+                var address = opt.getAttribute('data-address') || '';
+                townInput.value = town;
+                addrInput.value = address;
                 if(resolvedInput) resolvedInput.value = opt.getAttribute('data-resolved') || '';
                 if(coordInput) coordInput.value = opt.getAttribute('data-coords') || '';
                 var r = opt.getAttribute('data-resolved') || '';
@@ -266,7 +270,12 @@
                 if(c){
                     var parts = c.split(',');
                     if(parts.length === 2){ placeMarker(parts[0], parts[1]); }
+                    suppressSearch = true;
                 }
+                // Ensure WooCommerce and other listeners react to the new values
+                townInput.dispatchEvent(new Event('change', { bubbles: true }));
+                addrInput.dispatchEvent(new Event('change', { bubbles: true }));
+                suppressSearch = false;
             });
 
             // Automatically load the most recent address on first render
