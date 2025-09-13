@@ -194,3 +194,108 @@ msgstr "Approvato"
 
 msgid "Rider on the way"
 msgstr "Rider in arrivo"
+
+msgid "Rider"
+msgstr "Rider"
+
+msgid "Delivery completed."
+msgstr "Consegna completata."
+
+msgid "Store settings"
+msgstr "Impostazioni negozio"
+
+msgid "Address"
+msgstr "Indirizzo"
+
+msgid "Delivery postal codes"
+msgstr "CAP di consegna"
+
+msgid "e.g. 00100,00101"
+msgstr "es. 00100,00101"
+
+msgid "Mon"
+msgstr "Lun"
+
+msgid "Tue"
+msgstr "Mar"
+
+msgid "Wed"
+msgstr "Mer"
+
+msgid "Thu"
+msgstr "Gio"
+
+msgid "Fri"
+msgstr "Ven"
+
+msgid "Sat"
+msgstr "Sab"
+
+msgid "Sun"
+msgstr "Dom"
+
+msgid "OneSignal"
+msgstr "OneSignal"
+
+msgid "Store"
+msgstr "Negozio"
+
+msgid "Save settings"
+msgstr "Salva impostazioni"
+
+msgid "Add rider"
+msgstr "Aggiungi rider"
+
+msgid "Username"
+msgstr "Nome utente"
+
+msgid "Email"
+msgstr "Email"
+
+msgid "Password"
+msgstr "Password"
+
+msgid "ReeservaFood Settings"
+msgstr "Impostazioni ReeservaFood"
+
+msgid "Service worker files are auto-served at %1$s and %2$s via WordPress rewrites (no physical files needed)."
+msgstr "I file del service worker sono serviti automaticamente su %1$s e %2$s tramite le riscritture di WordPress (nessun file fisico necessario)."
+
+msgid "Shortcodes"
+msgstr "Shortcode"
+
+msgid "orders board"
+msgstr "bacheca ordini"
+
+msgid "product manager"
+msgstr "gestore prodotti"
+
+msgid "subscribe button"
+msgstr "pulsante di iscrizione"
+
+msgid "admin diagnostics"
+msgstr "diagnostica admin"
+
+msgid "Please complete the <a href=\"%s\">ReeservaFood setup</a>."
+msgstr "Completa la <a href=\"%s\">configurazione di ReeservaFood</a>."
+
+msgid "Welcome to ReeservaFood"
+msgstr "Benvenuto su ReeservaFood"
+
+msgid "Let's configure your store."
+msgstr "Configuriamo il tuo negozio."
+
+msgid "Shop address"
+msgstr "Indirizzo del negozio"
+
+msgid "Products"
+msgstr "Prodotti"
+
+msgid "Manage products"
+msgstr "Gestisci prodotti"
+
+msgid "Start Selling now"
+msgstr "Inizia a vendere ora"
+
+msgid "Keep the store closed for now"
+msgstr "Mantieni il negozio chiuso per ora"
