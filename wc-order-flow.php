@@ -14,6 +14,7 @@ if (!defined('ABSPATH')) exit;
 
 final class WCOF_Plugin {
     const OPTION_KEY = 'wcof_settings';
+    const LICENSE_STATUS_KEY = 'wcof_license_status';
     const META_ETA   = '_wcof_eta_minutes';
     const META_ARRIVAL = '_wcof_arrival_ts';
     const META_DECIDED = '_wcof_decided';
@@ -47,10 +48,17 @@ final class WCOF_Plugin {
         update_option('woocommerce_enable_cart_checkout_blocks', 'no');
         update_option('woocommerce_blocks_cart_checkout_enabled', 'no');
         update_option('woocommerce_cart_checkout_blocks_enabled', 'no');
+
+        if( !wp_next_scheduled('wcof_check_license') ){
+            wp_schedule_event(time(), 'daily', 'wcof_check_license');
+        }
+        $self->validate_license();
     }
     public static function deactivate(){
         remove_role('rider');
         flush_rewrite_rules();
+        $timestamp = wp_next_scheduled('wcof_check_license');
+        if($timestamp) wp_unschedule_event($timestamp, 'wcof_check_license');
     }
 
     public function __construct() {
@@ -132,6 +140,9 @@ final class WCOF_Plugin {
         // Push shortcodes (button + debug)
         add_shortcode('wcof_push_button', [$this,'shortcode_push_button']);
         add_shortcode('wcof_push_debug',  [$this,'shortcode_push_debug']);
+
+        add_action('wcof_check_license', [$this,'validate_license']);
+        add_action('admin_notices', [$this,'maybe_license_notice']);
     }
 
     /* ===== Service workers via rewrite to site root ===== */
@@ -958,6 +969,7 @@ final class WCOF_Plugin {
             'enable'=>!empty($v['enable'])?1:0,
             'app_id'=>isset($v['app_id'])?sanitize_text_field($v['app_id']):'',
             'rest_key'=>isset($v['rest_key'])?sanitize_text_field($v['rest_key']):'',
+            'license_key'=>isset($v['license_key'])?sanitize_text_field($v['license_key']):'',
             'notify_admin_new'=>!empty($v['notify_admin_new'])?1:0,
             'notify_user_processing'=>!empty($v['notify_user_processing'])?1:0,
             'notify_user_out'=>!empty($v['notify_user_out'])?1:0,
@@ -979,11 +991,41 @@ final class WCOF_Plugin {
     public function settings(){
         $d=get_option(self::OPTION_KEY,[]);
         return wp_parse_args($d,[
-            'enable'=>0,'app_id'=>'','rest_key'=>'',
+            'enable'=>0,'app_id'=>'','rest_key'=>'','license_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
             'postal_codes'=>'','language'=>'auto'
         ]);
+    }
+
+    public function validate_license(){
+        $key = $this->settings()['license_key'];
+        if(!$key){
+            update_option(self::LICENSE_STATUS_KEY, 'invalid');
+            return false;
+        }
+        $response = wp_remote_get('https://license.example.com/validate?license_key=' . urlencode($key), ['timeout'=>15]);
+        if(is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200){
+            update_option(self::LICENSE_STATUS_KEY, 'invalid');
+            return false;
+        }
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        if(!empty($data['valid'])){
+            update_option(self::LICENSE_STATUS_KEY, 'valid');
+            return true;
+        }
+        update_option(self::LICENSE_STATUS_KEY, 'invalid');
+        return false;
+    }
+
+    public function is_license_valid(){
+        return get_option(self::LICENSE_STATUS_KEY) === 'valid';
+    }
+
+    public function maybe_license_notice(){
+        if( !current_user_can('manage_woocommerce') ) return;
+        if( $this->is_license_valid() ) return;
+        echo '<div class="notice notice-error"><p>'.esc_html__('ReeservaFood license is invalid or expired. Some features are disabled.', 'wc-order-flow').'</p></div>';
     }
 
     public function delivery_postal_codes(){
@@ -1309,6 +1351,10 @@ final class WCOF_Plugin {
           <h1>ReeservaFood Settings</h1>
           <form method="post" action="options.php">
             <?php settings_fields(self::OPTION_KEY); ?>
+            <h2>License</h2>
+            <table class="form-table" role="presentation">
+              <tr><th scope="row">License Key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[license_key]" value="<?php echo esc_attr($s['license_key']); ?>"/></td></tr>
+            </table>
             <h2>Store</h2>
             <table class="form-table" role="presentation">
               <tr><th scope="row">Address</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
@@ -1409,6 +1455,7 @@ final class WCOF_Plugin {
 
     /* ===== OneSignal init + push senders ===== */
     public function maybe_inject_onesignal_sdk(){
+        if( !$this->is_license_valid() ) return;
         $s = $this->settings();
         if( empty($s['enable']) || empty($s['app_id']) ) return;
         wp_enqueue_script('wcof-onesignal', plugins_url('assets/onesignal-init.js', __FILE__), [], '1.9.0', true);
@@ -1420,6 +1467,7 @@ final class WCOF_Plugin {
     }
 
     private function push_send($payload){
+        if( !$this->is_license_valid() ) return;
         $s = $this->settings();
         if( empty($s['enable']) || empty($s['app_id']) || empty($s['rest_key']) ) return;
         $payload['app_id'] = $s['app_id'];
@@ -1656,6 +1704,7 @@ final class WCOF_Plugin {
 
     /* ===== Push shortcodes ===== */
     public function shortcode_push_button($atts=[]){
+        if( !$this->is_license_valid() ) return '';
         if( empty($this->settings()['enable']) ) return '';
         wp_enqueue_script('wcof-push-btn', plugins_url('assets/push-button.js', __FILE__), [], '1.9.0', true);
         ob_start(); ?>
@@ -1668,6 +1717,7 @@ final class WCOF_Plugin {
     }
     public function shortcode_push_debug($atts=[]){
         if(!current_user_can('manage_woocommerce')) return '';
+        if( !$this->is_license_valid() ) return '<em>License invalid.</em>';
         if( empty($this->settings()['enable']) ) return '<em>Enable push in settings first.</em>';
         wp_enqueue_script('wcof-push-debug', plugins_url('assets/push-debug.js', __FILE__), [], '1.9.0', true);
         return '<div id="wcof-push-debug" style="padding:12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc"></div>';
