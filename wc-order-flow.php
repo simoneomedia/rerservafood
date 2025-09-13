@@ -132,6 +132,9 @@ final class WCOF_Plugin {
         // Push shortcodes (button + debug)
         add_shortcode('wcof_push_button', [$this,'shortcode_push_button']);
         add_shortcode('wcof_push_debug',  [$this,'shortcode_push_debug']);
+
+        // Display opt-in button on customer account pages
+        add_action('woocommerce_account_dashboard', [$this,'account_push_button']);
     }
 
     /* ===== Service workers via rewrite to site root ===== */
@@ -1456,6 +1459,8 @@ final class WCOF_Plugin {
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'ETA ~ '.$eta.' min','es'=>'ETA ~ '.$eta.' min','it'=>'ETA ~ '.$eta.' min'],
             'url'=>$url,
+            // Target the purchasing user via external ID and role tag
+            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'user' ] ],
             'include_external_user_ids' => [ (string)$uid ],
             'ttl'=>300
         ]);
@@ -1469,6 +1474,7 @@ final class WCOF_Plugin {
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'Entrega en curso','es'=>'Entrega en curso','it'=>'Consegna in corso'],
             'url'=>$url,
+            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'user' ] ],
             'include_external_user_ids' => [ (string)$uid ],
             'ttl'=>300
         ]);
@@ -1652,6 +1658,11 @@ final class WCOF_Plugin {
         </script>
         <?php
         return ob_get_clean();
+    }
+
+    public function account_push_button(){
+        if( empty($this->settings()['enable']) ) return;
+        echo do_shortcode('[wcof_push_button]');
     }
 
     /* ===== Push shortcodes ===== */
