@@ -1,8 +1,8 @@
 (function(){
     var deferredPrompt;
-    window.addEventListener('beforeinstallprompt', function(e){
-        e.preventDefault();
-        deferredPrompt = e;
+
+    function createBanner(){
+        if(document.getElementById('wcof-install-banner')) return;
         var banner = document.createElement('div');
         banner.id = 'wcof-install-banner';
         var button = document.createElement('button');
@@ -17,5 +17,21 @@
                 deferredPrompt = null;
             }
         });
+    }
+
+    window.addEventListener('beforeinstallprompt', function(e){
+        e.preventDefault();
+        deferredPrompt = e;
+        createBanner();
     });
+
+    if(/iphone|ipad|ipod|android/i.test(navigator.userAgent)){
+        window.addEventListener('load', function(){
+            setTimeout(function(){
+                if(!deferredPrompt && !window.matchMedia('(display-mode: standalone)').matches){
+                    createBanner();
+                }
+            }, 3000);
+        });
+    }
 })();
