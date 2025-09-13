@@ -194,3 +194,108 @@ msgstr "Aprobado"
 
 msgid "Rider on the way"
 msgstr "Repartidor en camino"
+
+msgid "Rider"
+msgstr "Repartidor"
+
+msgid "Delivery completed."
+msgstr "Entrega completada."
+
+msgid "Store settings"
+msgstr "Configuración de la tienda"
+
+msgid "Address"
+msgstr "Dirección"
+
+msgid "Delivery postal codes"
+msgstr "Códigos postales de entrega"
+
+msgid "e.g. 00100,00101"
+msgstr "p. ej. 00100,00101"
+
+msgid "Mon"
+msgstr "Lun"
+
+msgid "Tue"
+msgstr "Mar"
+
+msgid "Wed"
+msgstr "Mié"
+
+msgid "Thu"
+msgstr "Jue"
+
+msgid "Fri"
+msgstr "Vie"
+
+msgid "Sat"
+msgstr "Sáb"
+
+msgid "Sun"
+msgstr "Dom"
+
+msgid "OneSignal"
+msgstr "OneSignal"
+
+msgid "Store"
+msgstr "Tienda"
+
+msgid "Save settings"
+msgstr "Guardar ajustes"
+
+msgid "Add rider"
+msgstr "Añadir repartidor"
+
+msgid "Username"
+msgstr "Nombre de usuario"
+
+msgid "Email"
+msgstr "Correo electrónico"
+
+msgid "Password"
+msgstr "Contraseña"
+
+msgid "ReeservaFood Settings"
+msgstr "Configuración de ReeservaFood"
+
+msgid "Service worker files are auto-served at %1$s and %2$s via WordPress rewrites (no physical files needed)."
+msgstr "Los archivos del service worker se sirven automáticamente en %1$s y %2$s mediante las reescrituras de WordPress (no se necesitan archivos físicos)."
+
+msgid "Shortcodes"
+msgstr "Shortcodes"
+
+msgid "orders board"
+msgstr "panel de pedidos"
+
+msgid "product manager"
+msgstr "gestor de productos"
+
+msgid "subscribe button"
+msgstr "botón de suscripción"
+
+msgid "admin diagnostics"
+msgstr "diagnóstico de administrador"
+
+msgid "Please complete the <a href=\"%s\">ReeservaFood setup</a>."
+msgstr "Completa la <a href=\"%s\">configuración de ReeservaFood</a>."
+
+msgid "Welcome to ReeservaFood"
+msgstr "Bienvenido a ReeservaFood"
+
+msgid "Let's configure your store."
+msgstr "Configuremos tu tienda."
+
+msgid "Shop address"
+msgstr "Dirección de la tienda"
+
+msgid "Products"
+msgstr "Productos"
+
+msgid "Manage products"
+msgstr "Gestionar productos"
+
+msgid "Start Selling now"
+msgstr "Comenzar a vender ahora"
+
+msgid "Keep the store closed for now"
+msgstr "Mantener la tienda cerrada por ahora"
