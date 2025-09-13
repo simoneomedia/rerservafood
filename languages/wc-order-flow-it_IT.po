@@ -308,3 +308,6 @@ msgstr "Mostra prompt di installazione"
 
 msgid "Install prompt text"
 msgstr "Testo del prompt di installazione"
+
+msgid "Add this page to your home screen via your browser menu"
+msgstr "Aggiungi questa pagina alla schermata iniziale dal menu del browser"
