@@ -116,6 +116,8 @@ final class WCOF_Plugin {
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
+        add_filter('woocommerce_shipping_methods', [$this,'register_shipping_method']);
+        add_action('admin_enqueue_scripts', [$this,'admin_scripts']);
 
         add_action('woocommerce_checkout_before_customer_details', [$this,'render_checkout_address'], 5);
         add_action('woocommerce_checkout_process', [$this,'validate_checkout_address']);
@@ -967,6 +969,19 @@ final class WCOF_Plugin {
     public function register_settings(){
         register_setting(self::OPTION_KEY, self::OPTION_KEY, ['sanitize_callback'=>[$this,'sanitize_settings']]);
     }
+    public function admin_scripts($hook){
+        if($hook !== 'woocommerce_page_wcof-settings') return;
+        wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
+        wp_enqueue_style('leaflet-draw', 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css', ['leaflet'], '1.0.4');
+        wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
+        wp_enqueue_script('leaflet-draw', 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js', ['leaflet'], '1.0.4', true);
+        wp_enqueue_script('wcof-zone-settings', plugins_url('assets/zone-settings.js', __FILE__), ['leaflet','leaflet-draw'], '1.0', true);
+        $s = $this->settings();
+        wp_localize_script('wcof-zone-settings','wcofZoneSettings',[
+            'polygon'=>$s['delivery_polygon'],
+            'address'=>$s['address'],
+        ]);
+    }
     public function sanitize_settings($v){
         $v=is_array($v)?$v:[];
         $out=[
@@ -983,6 +998,8 @@ final class WCOF_Plugin {
             'store_closed'=>!empty($v['store_closed'])?1:0,
             'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0,
             'postal_codes'=>isset($v['postal_codes'])?sanitize_text_field($v['postal_codes']):'',
+            'delivery_radius'=>isset($v['delivery_radius'])?floatval($v['delivery_radius']):0,
+            'delivery_polygon'=>isset($v['delivery_polygon'])?wp_kses_post($v['delivery_polygon']):'',
             'language'=>isset($v['language'])?sanitize_text_field($v['language']):'auto'
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
@@ -998,7 +1015,7 @@ final class WCOF_Plugin {
             'enable'=>0,'app_id'=>'','rest_key'=>'','license_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
-            'postal_codes'=>'','language'=>'auto'
+            'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto'
         ]);
     }
 
@@ -1037,11 +1054,18 @@ final class WCOF_Plugin {
         $codes = array_filter($codes, function($c){ return $c!==''; });
         return $codes;
     }
+    public function register_shipping_method($methods){
+        $methods['wcof_distance'] = 'WCOF_Distance_Shipping';
+        return $methods;
+    }
 
     public function enqueue_checkout_scripts(){
         if( !function_exists('is_checkout') || !is_checkout() ) return;
+        $s     = $this->settings();
         $codes = $this->delivery_postal_codes();
-        $store = $this->settings()['address'];
+        $store = $s['address'];
+        $radius = isset($s['delivery_radius']) ? floatval($s['delivery_radius']) : 0;
+        $polygon = isset($s['delivery_polygon']) ? $s['delivery_polygon'] : '';
         wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', [], '1.9.4');
         wp_enqueue_style('wcof-checkout', plugins_url('assets/checkout.css', __FILE__), [], '1.0');
         wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', [], '1.9.4', true);
@@ -1049,6 +1073,8 @@ final class WCOF_Plugin {
         wp_localize_script('wcof-checkout-address', 'wcofCheckoutAddress', [
             'postalCodes'  => $codes,
             'storeAddress' => $store,
+            'radius'       => $radius,
+            'polygon'      => $polygon,
         ]);
     }
 
@@ -1263,6 +1289,7 @@ final class WCOF_Plugin {
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
     }
     public function validate_checkout_address(){
+        $s = $this->settings();
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
         $town     = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
@@ -1276,6 +1303,25 @@ final class WCOF_Plugin {
             wc_add_notice(__('Please select a valid address from the map.','wc-order-flow'), 'error');
         }elseif( !empty($codes) && !in_array($postcode, $codes, true) ){
             wc_add_notice(__('The address is outside of our delivery area.','wc-order-flow'), 'error');
+        }else{
+            list($lat,$lng) = array_map('floatval', explode(',', $coords));
+            $radius = isset($s['delivery_radius']) ? floatval($s['delivery_radius']) : 0;
+            $polygon = isset($s['delivery_polygon']) ? $s['delivery_polygon'] : '';
+            if($radius > 0){
+                $store_geo = self::geocode_address($s['address']);
+                if($store_geo){
+                    $dist = self::haversine_distance($store_geo[0], $store_geo[1], $lat, $lng);
+                    if($dist > $radius){
+                        wc_add_notice(__('The address is outside of our delivery radius.','wc-order-flow'), 'error');
+                    }
+                }
+            }
+            if($polygon){
+                $poly = json_decode($polygon, true);
+                if(is_array($poly) && !self::point_in_polygon($lat,$lng,$poly)){
+                    wc_add_notice(__('The address is outside of our delivery area.','wc-order-flow'), 'error');
+                }
+            }
         }
     }
 
@@ -1409,8 +1455,15 @@ final class WCOF_Plugin {
             <h2>Store</h2>
 
             <table class="form-table" role="presentation">
-              <tr><th scope="row"><?php esc_html_e('Address', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
-              <tr><th scope="row"><?php esc_html_e('Delivery postal codes', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[postal_codes]" value="<?php echo esc_attr($s['postal_codes']); ?>" placeholder="<?php esc_attr_e('e.g. 00100,00101', 'wc-order-flow'); ?>"/></td></tr>
+              <tr><th scope="row">Address</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
+              <tr><th scope="row">Delivery postal codes</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[postal_codes]" value="<?php echo esc_attr($s['postal_codes']); ?>" placeholder="e.g. 00100,00101"/></td></tr>
+              <tr><th scope="row">Delivery radius (km)</th><td><input type="number" step="0.1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[delivery_radius]" value="<?php echo esc_attr($s['delivery_radius']); ?>"/></td></tr>
+              <tr><th scope="row">Delivery area polygon</th><td>
+                <div id="wcof_zone_map" style="height:300px"></div>
+                <input type="hidden" name="<?php echo esc_attr(self::OPTION_KEY); ?>[delivery_polygon]" id="wcof_delivery_polygon" value="<?php echo esc_attr($s['delivery_polygon']); ?>"/>
+                <p class="description">Draw the allowed delivery area.</p>
+              </td></tr>
+
               <tr><th scope="row"><?php esc_html_e('Language', 'wc-order-flow'); ?></th><td>
                 <select name="<?php echo esc_attr(self::OPTION_KEY); ?>[language]">
                   <option value="auto" <?php selected($s['language'],'auto'); ?>><?php esc_html_e('Automatic', 'wc-order-flow'); ?></option>
@@ -1854,9 +1907,41 @@ final class WCOF_Plugin {
         return ob_get_clean();
     }
 
-    public function account_push_button(){
-        if( empty($this->settings()['enable']) ) return;
-        echo do_shortcode('[wcof_push_button]');
+    public static function geocode_address($address){
+        $key = 'wcof_geo_' . md5($address);
+        $cached = get_transient($key);
+        if($cached) return $cached;
+        $url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' . urlencode($address);
+        $res = wp_remote_get($url, ['timeout'=>5]);
+        if(is_wp_error($res)) return false;
+        $body = wp_remote_retrieve_body($res);
+        $data = json_decode($body, true);
+        if(is_array($data) && !empty($data[0]['lat'])){
+            $out = [floatval($data[0]['lat']), floatval($data[0]['lon'])];
+            set_transient($key, $out, DAY_IN_SECONDS);
+            return $out;
+        }
+        return false;
+    }
+    public static function haversine_distance($lat1,$lon1,$lat2,$lon2){
+        $earth = 6371; // km
+        $lat1 = deg2rad($lat1); $lat2 = deg2rad($lat2);
+        $lon1 = deg2rad($lon1); $lon2 = deg2rad($lon2);
+        $dlat = $lat2 - $lat1; $dlon = $lon2 - $lon1;
+        $a = sin($dlat/2)**2 + cos($lat1)*cos($lat2)*sin($dlon/2)**2;
+        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+        return $earth * $c;
+    }
+    public static function point_in_polygon($lat,$lng,$poly){
+        $inside = false; $count = count($poly);
+        for($i=0,$j=$count-1; $i<$count; $j=$i++){
+            $xi=$poly[$i][0]; $yi=$poly[$i][1];
+            $xj=$poly[$j][0]; $yj=$poly[$j][1];
+            $intersect = (($yi>$lng) != ($yj>$lng)) && ($lat < ($xj-$xi)*($lng-$yi)/($yj-$yi) + $xi);
+            if($intersect) $inside = !$inside;
+        }
+        return $inside;
+
     }
 
     /* ===== Push shortcodes ===== */
@@ -1883,3 +1968,64 @@ final class WCOF_Plugin {
 register_activation_hook(__FILE__, ['WCOF_Plugin','activate']);
 register_deactivation_hook(__FILE__, ['WCOF_Plugin','deactivate']);
 add_action('plugins_loaded', function(){ if(class_exists('WooCommerce')){ new WCOF_Plugin(); } });
+
+if(class_exists('WC_Shipping_Method') && !class_exists('WCOF_Distance_Shipping')){
+class WCOF_Distance_Shipping extends WC_Shipping_Method {
+    public function __construct($instance_id = 0){
+        $this->id = 'wcof_distance';
+        $this->instance_id = absint($instance_id);
+        $this->method_title = __('Distance Delivery','wc-order-flow');
+        $this->method_description = __('Delivery fee calculated by distance','wc-order-flow');
+        $this->supports = ['shipping-zones','instance-settings'];
+        $this->init();
+    }
+    public function init(){
+        $this->init_form_fields();
+        $this->init_settings();
+        $this->title = $this->get_option('title', __('Delivery','wc-order-flow'));
+        add_action('woocommerce_update_options_shipping_'.$this->id, [$this,'process_admin_options']);
+        add_action('woocommerce_update_options_shipping_'.$this->id.'_'.$this->instance_id, [$this,'process_admin_options']);
+    }
+    public function init_form_fields(){
+        $this->form_fields = [
+            'title'=>[
+                'title'=>__('Title','wc-order-flow'),
+                'type'=>'text',
+                'default'=>__('Delivery','wc-order-flow')
+            ],
+            'rate'=>[
+                'title'=>__('Rate per km','wc-order-flow'),
+                'type'=>'number',
+                'default'=>'1',
+                'description'=>__('Cost per kilometer','wc-order-flow'),
+                'desc_tip'=>true,
+            ]
+        ];
+    }
+    public function calculate_shipping($package=array()){
+        $rate = floatval($this->get_option('rate',1));
+        $cost = 0;
+        if(!empty($_POST['wcof_delivery_coords'])){
+            $parts = explode(',', sanitize_text_field($_POST['wcof_delivery_coords']));
+            if(count($parts)===2){
+                $dest_lat = floatval($parts[0]);
+                $dest_lng = floatval($parts[1]);
+                $settings = get_option(WCOF_Plugin::OPTION_KEY, []);
+                $address = $settings['address'] ?? '';
+                if($address){
+                    $store_geo = WCOF_Plugin::geocode_address($address);
+                    if($store_geo){
+                        $distance = WCOF_Plugin::haversine_distance($store_geo[0], $store_geo[1], $dest_lat, $dest_lng);
+                        $cost = $distance * $rate;
+                    }
+                }
+            }
+        }
+        $this->add_rate([
+            'id'=>$this->id . ':' . $this->instance_id,
+            'label'=>$this->title,
+            'cost'=>$cost,
+        ]);
+    }
+}
+}

@@ -40,6 +40,10 @@
 
         var allowed = wcofCheckoutAddress.postalCodes || [];
         var store = wcofCheckoutAddress.storeAddress || '';
+        var radius = parseFloat(wcofCheckoutAddress.radius || 0);
+        var polygonData = wcofCheckoutAddress.polygon ? JSON.parse(wcofCheckoutAddress.polygon) : null;
+        var storeCoords = null;
+        var polygonLayer = null;
         var get = function(id){ return document.getElementById(id); };
         var townInput = get('wcof_delivery_town');
         var addrInput = get('wcof_delivery_address');
@@ -58,6 +62,12 @@
         Leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
+        if(polygonData){
+            try{
+                polygonLayer = Leaflet.polygon(polygonData, {color:'blue', weight:1}).addTo(map);
+                map.fitBounds(polygonLayer.getBounds());
+            }catch(e){}
+        }
 
         // Leaflet calculates the initial map size during construction. When the
         // container is hidden (e.g. inside a collapsed section) this size ends
@@ -110,7 +120,8 @@
                             var bb = item.boundingbox.map(parseFloat);
                             map.fitBounds([[bb[0], bb[2]], [bb[1], bb[3]]]);
                         }else if(item.lat && item.lon){
-                            map.setView([parseFloat(item.lat), parseFloat(item.lon)], 12);
+                            storeCoords = [parseFloat(item.lat), parseFloat(item.lon)];
+                            map.setView(storeCoords, 12);
                         }
                     }
                 }).catch(function(){});
@@ -130,6 +141,28 @@
                 }).catch(function(){});
         }
 
+        function pointInPolygon(point, vs){
+            var x = point[0], y = point[1];
+            var inside = false;
+            for (var i=0, j=vs.length-1; i<vs.length; j=i++) {
+                var xi = vs[i][0], yi = vs[i][1];
+                var xj = vs[j][0], yj = vs[j][1];
+                var intersect = ((yi>y)!=(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+        function isWithinZones(latlng){
+            if(radius>0 && storeCoords){
+                var d = Leaflet.latLng(latlng.lat, latlng.lng).distanceTo(Leaflet.latLng(storeCoords[0], storeCoords[1]))/1000;
+                if(d>radius) return false;
+            }
+            if(polygonData){
+                if(!pointInPolygon([latlng.lat, latlng.lng], polygonData)) return false;
+            }
+            return true;
+        }
+
         function reverseAndFill(latlng){
             if(coordInput) coordInput.value = latlng.lat + ',' + latlng.lng;
             return fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat='+latlng.lat+'&lon='+latlng.lng)
@@ -138,6 +171,16 @@
                     var addr = data.address || {};
                     var pc = addr.postcode || '';
                     if(allowed.length && allowed.indexOf(pc) === -1){
+                        showError('Address not in delivery area or not found');
+                        if(validInput) validInput.value='';
+                        if(resolvedInput) resolvedInput.value='';
+                        if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
+                        document.querySelector('#billing_state').value = '';
+                        document.querySelector('#shipping_state').value = '';
+                        toggleQuickPayButtons(false);
+                        return;
+                    }
+                    if(!isWithinZones(latlng)){
                         showError('Address not in delivery area or not found');
                         if(validInput) validInput.value='';
                         if(resolvedInput) resolvedInput.value='';
