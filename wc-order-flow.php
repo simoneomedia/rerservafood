@@ -947,6 +947,7 @@ final class WCOF_Plugin {
     /* ===== Settings page ===== */
     public function admin_menu(){
         add_submenu_page('woocommerce','ReeservaFood','ReeservaFood','manage_woocommerce','wcof-settings',[$this,'settings_page']);
+        add_submenu_page('woocommerce','WCOF Analytics','WCOF Analytics','manage_woocommerce','wcof-analytics',[$this,'analytics_page']);
         add_submenu_page(null,'ReeservaFood Setup','ReeservaFood Setup','manage_woocommerce','wcof-setup',[$this,'setup_page']);
     }
     public function register_settings(){
@@ -1404,6 +1405,78 @@ final class WCOF_Plugin {
         update_option(self::OPTION_KEY,$opts);
         update_option('wcof_setup_done',1);
         wp_safe_redirect(admin_url('admin.php?page=wcof-settings'));
+        exit;
+    }
+
+    /* ===== Analytics ===== */
+    public function analytics_page(){
+        if(isset($_GET['wcof_export']) && $_GET['wcof_export']){
+            $this->export_analytics_csv();
+            return;
+        }
+        $data = $this->analytics_data();
+        echo '<div class="wrap"><h1>WCOF Analytics</h1>';
+        echo '<p><strong>Total sales:</strong> '.esc_html($data['total_sales_fmt']).'</p>';
+        echo '<p><strong>Average ETA:</strong> '.esc_html($data['avg_eta']).' min</p>';
+        echo '<p><strong>Average delivery time:</strong> '.esc_html($data['avg_delivery']).' min</p>';
+        echo '<canvas id="wcof-analytics-chart" height="200"></canvas>';
+        echo '<p><a class="button" href="'.esc_url(add_query_arg('wcof_export','1')).'">Export CSV</a></p>';
+        echo '</div>';
+        wp_enqueue_script('chartjs','https://cdn.jsdelivr.net/npm/chart.js',[], '4.4.0', true);
+        wp_enqueue_script('wcof-analytics', plugins_url('assets/analytics.js', __FILE__), ['chartjs'], '1.0', true);
+        wp_localize_script('wcof-analytics','WCOF_ANALYTICS', [
+            'topProducts' => $data['top_products'],
+        ]);
+    }
+
+    private function analytics_data(){
+        global $wpdb;
+        $after = gmdate('Y-m-d H:i:s', strtotime('-30 days'));
+        $posts = $wpdb->posts;
+        $postmeta = $wpdb->postmeta;
+        $order_items = $wpdb->prefix.'woocommerce_order_items';
+        $order_itemmeta = $wpdb->prefix.'woocommerce_order_itemmeta';
+        $statuses = "('wc-completed','wc-processing','wc-out-for-delivery')";
+
+        $sales = $wpdb->get_var($wpdb->prepare("SELECT SUM(pm.meta_value) FROM $postmeta pm JOIN $posts p ON p.ID=pm.post_id WHERE pm.meta_key='_order_total' AND p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s", $after));
+        $avg_eta = $wpdb->get_var($wpdb->prepare("SELECT AVG(pm.meta_value) FROM $postmeta pm JOIN $posts p ON p.ID=pm.post_id WHERE pm.meta_key=%s AND p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s", self::META_ETA, $after));
+        $avg_delivery = $wpdb->get_var($wpdb->prepare("SELECT AVG((arr.meta_value - UNIX_TIMESTAMP(p.post_date))/60) FROM $postmeta arr JOIN $posts p ON p.ID=arr.post_id WHERE arr.meta_key=%s AND arr.meta_value>0 AND p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s", self::META_ARRIVAL, $after));
+
+        $top_rows = $wpdb->get_results($wpdb->prepare("SELECT pid.meta_value as product_id, SUM(qty.meta_value) as qty FROM $order_items oi JOIN $order_itemmeta pid ON oi.order_item_id=pid.order_item_id AND pid.meta_key='_product_id' JOIN $order_itemmeta qty ON oi.order_item_id=qty.order_item_id AND qty.meta_key='_qty' JOIN $posts p ON oi.order_id=p.ID WHERE p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s GROUP BY product_id ORDER BY qty DESC LIMIT 5", $after));
+        $top_products = [];
+        if($top_rows){
+            foreach($top_rows as $row){
+                $top_products[] = [
+                    'name' => get_the_title($row->product_id),
+                    'qty'  => intval($row->qty),
+                ];
+            }
+        }
+
+        return [
+            'total_sales'     => floatval($sales),
+            'total_sales_fmt' => function_exists('wc_price') ? wc_price($sales) : $sales,
+            'avg_eta'         => $avg_eta ? round($avg_eta,1) : 0,
+            'avg_delivery'    => $avg_delivery ? round($avg_delivery,1) : 0,
+            'top_products'    => $top_products,
+        ];
+    }
+
+    private function export_analytics_csv(){
+        if(!current_user_can('manage_woocommerce')) wp_die(__('Unauthorized', 'wc-order-flow'));
+        $data = $this->analytics_data();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=wcof-analytics.csv');
+        $out = fopen('php://output','w');
+        fputcsv($out, ['Total sales', $data['total_sales']]);
+        fputcsv($out, ['Average ETA', $data['avg_eta']]);
+        fputcsv($out, ['Average delivery time', $data['avg_delivery']]);
+        fputcsv($out, []);
+        fputcsv($out, ['Top product', 'Quantity']);
+        foreach($data['top_products'] as $p){
+            fputcsv($out, [$p['name'], $p['qty']]);
+        }
+        fclose($out);
         exit;
     }
 
