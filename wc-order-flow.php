@@ -1025,7 +1025,7 @@ final class WCOF_Plugin {
             update_option(self::LICENSE_STATUS_KEY, 'invalid');
             return false;
         }
-        $response = wp_remote_get('https://license.example.com/validate?license_key=' . urlencode($key), ['timeout'=>15]);
+        $response = wp_remote_get('https://reeserva.growmydigital.com/key-check/?license_key=' . urlencode($key), ['timeout'=>15]);
         if(is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200){
             update_option(self::LICENSE_STATUS_KEY, 'invalid');
             return false;
