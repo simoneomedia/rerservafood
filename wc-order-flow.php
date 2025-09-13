@@ -212,6 +212,13 @@ echo '<meta name="theme-color" content="'.esc_attr($s['pwa_color']).'" />' . "\n
 if(!empty($s['pwa_icon'])){
 echo '<link rel="apple-touch-icon" href="'.esc_url($s['pwa_icon']).'" />' . "\n";
 }
+if(!empty($s['pwa_prompt'])){
+wp_enqueue_script('wcof-pwa-install', plugins_url('assets/pwa-install-prompt.js', __FILE__), [], '1.0', true);
+wp_localize_script('wcof-pwa-install', 'wcofPwaPrompt', [
+'text'=> $s['pwa_prompt_text']? $s['pwa_prompt_text']:esc_html__('Download the app','wc-order-flow')
+]);
+echo '<link rel="stylesheet" href="'.esc_url(plugins_url('assets/pwa-install-prompt.css', __FILE__)).'" />' . "\n";
+}
 }
 
     /* Avoid any 301/302 on SW files — redirects break registration */
@@ -1050,7 +1057,9 @@ echo '<link rel="apple-touch-icon" href="'.esc_url($s['pwa_icon']).'" />' . "\n"
             'pwa_enable'=>!empty($v['pwa_enable'])?1:0,
             'pwa_name'=>isset($v['pwa_name'])?sanitize_text_field($v['pwa_name']):'',
             'pwa_icon'=>isset($v['pwa_icon'])?esc_url_raw($v['pwa_icon']):'',
-            'pwa_color'=>isset($v['pwa_color'])?sanitize_hex_color($v['pwa_color']):''
+            'pwa_color'=>isset($v['pwa_color'])?sanitize_hex_color($v['pwa_color']):'',
+            'pwa_prompt'=>!empty($v['pwa_prompt'])?1:0,
+            'pwa_prompt_text'=>isset($v['pwa_prompt_text'])?sanitize_text_field($v['pwa_prompt_text']):''
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
@@ -1066,7 +1075,7 @@ echo '<link rel="apple-touch-icon" href="'.esc_url($s['pwa_icon']).'" />' . "\n"
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
             'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto',
-            'pwa_enable'=>0,'pwa_name'=>'','pwa_icon'=>'','pwa_color'=>'#ffffff'
+            'pwa_enable'=>0,'pwa_name'=>'','pwa_icon'=>'','pwa_color'=>'#ffffff','pwa_prompt'=>1,'pwa_prompt_text'=>''
         ]);
     }
 
@@ -1544,6 +1553,8 @@ echo '<link rel="apple-touch-icon" href="'.esc_url($s['pwa_icon']).'" />' . "\n"
               <tr><th scope="row"><?php esc_html_e('App name', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_name]" value="<?php echo esc_attr($s['pwa_name']); ?>" placeholder="<?php echo esc_attr(get_bloginfo('name')); ?>"/></td></tr>
               <tr><th scope="row"><?php esc_html_e('App icon URL', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_icon]" value="<?php echo esc_attr($s['pwa_icon']); ?>" placeholder="https://example.com/icon.png"/></td></tr>
               <tr><th scope="row"><?php esc_html_e('Theme color', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_color]" value="<?php echo esc_attr($s['pwa_color']); ?>" placeholder="#ffffff"/></td></tr>
+              <tr><th scope="row"><?php esc_html_e('Show install prompt', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_prompt]" value="1" <?php checked($s['pwa_prompt'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
+              <tr><th scope="row"><?php esc_html_e('Install prompt text', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_prompt_text]" value="<?php echo esc_attr($s['pwa_prompt_text']); ?>" placeholder="<?php esc_attr_e('Download the app', 'wc-order-flow'); ?>"/></td></tr>
             </table>
             <h2><?php esc_html_e('OneSignal', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">

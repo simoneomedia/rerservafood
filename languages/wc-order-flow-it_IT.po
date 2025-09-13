@@ -299,3 +299,12 @@ msgstr "Inizia a vendere ora"
 
 msgid "Keep the store closed for now"
 msgstr "Mantieni il negozio chiuso per ora"
+
+msgid "Download the app"
+msgstr "Scarica l'app"
+
+msgid "Show install prompt"
+msgstr "Mostra prompt di installazione"
+
+msgid "Install prompt text"
+msgstr "Testo del prompt di installazione"
