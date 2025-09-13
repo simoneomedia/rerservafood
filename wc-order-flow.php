@@ -1444,14 +1444,20 @@ final class WCOF_Plugin {
     }
 
     public function settings_page(){
-        $s=$this->settings(); ?>
+        $this->validate_license();
+        $s=$this->settings();
+        $license_valid = $this->is_license_valid(); ?>
         <div class="wrap">
           <h1><?php esc_html_e('ReeservaFood Settings', 'wc-order-flow'); ?></h1>
           <form method="post" action="options.php">
             <?php settings_fields(self::OPTION_KEY); ?>
             <h2>License</h2>
             <table class="form-table" role="presentation">
-              <tr><th scope="row">License Key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[license_key]" value="<?php echo esc_attr($s['license_key']); ?>"/></td></tr>
+              <tr><th scope="row">License Key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[license_key]" value="<?php echo esc_attr($s['license_key']); ?>"/>
+                <p class="description" style="color:<?php echo $license_valid ? 'green' : 'red'; ?>;">
+                  <?php echo $license_valid ? esc_html__('License is valid', 'wc-order-flow') : esc_html__('License is invalid or expired', 'wc-order-flow'); ?>
+                </p>
+              </td></tr>
             </table>
             <h2>Store</h2>
 
@@ -1484,16 +1490,16 @@ final class WCOF_Plugin {
             </table>
             <h2><?php esc_html_e('OneSignal', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
-              <tr><th scope="row"><?php esc_html_e('Enable push', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[enable]" value="1" <?php checked($s['enable'],1); ?>/> <?php esc_html_e('On', 'wc-order-flow'); ?></label></td></tr>
-              <tr><th scope="row"><?php esc_html_e('OneSignal App ID', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[app_id]" value="<?php echo esc_attr($s['app_id']); ?>" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"/></td></tr>
-              <tr><th scope="row"><?php esc_html_e('OneSignal REST API Key', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rest_key]" value="<?php echo esc_attr($s['rest_key']); ?>" placeholder="REST API Key (server)"/></td></tr>
+              <tr><th scope="row"><?php esc_html_e('Enable push', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[enable]" value="1" <?php checked($s['enable'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('On', 'wc-order-flow'); ?></label></td></tr>
+              <tr><th scope="row"><?php esc_html_e('OneSignal App ID', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[app_id]" value="<?php echo esc_attr($s['app_id']); ?>" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" <?php disabled(!$license_valid); ?>/></td></tr>
+              <tr><th scope="row"><?php esc_html_e('OneSignal REST API Key', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rest_key]" value="<?php echo esc_attr($s['rest_key']); ?>" placeholder="REST API Key (server)" <?php disabled(!$license_valid); ?>/></td></tr>
             </table>
             <h2><?php esc_html_e('Notify on', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
-              <tr><th><?php esc_html_e('Admin', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_admin_new]" value="1" <?php checked($s['notify_admin_new'],1); ?>/> <?php esc_html_e('New order', 'wc-order-flow'); ?></label></td></tr>
+              <tr><th><?php esc_html_e('Admin', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_admin_new]" value="1" <?php checked($s['notify_admin_new'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('New order', 'wc-order-flow'); ?></label></td></tr>
               <tr><th><?php esc_html_e('User', 'wc-order-flow'); ?></th><td>
-                <label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_processing]" value="1" <?php checked($s['notify_user_processing'],1); ?>/> <?php esc_html_e('Approved', 'wc-order-flow'); ?></label><br/>
-                <label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_out]" value="1" <?php checked($s['notify_user_out'],1); ?>/> <?php esc_html_e('Rider on the way', 'wc-order-flow'); ?></label>
+                <label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_processing]" value="1" <?php checked($s['notify_user_processing'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('Approved', 'wc-order-flow'); ?></label><br/>
+                <label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_out]" value="1" <?php checked($s['notify_user_out'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('Rider on the way', 'wc-order-flow'); ?></label>
               </td></tr>
             </table>
             <?php submit_button(); ?>
