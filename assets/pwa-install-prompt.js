@@ -5,18 +5,25 @@
         if(document.getElementById('wcof-install-banner')) return;
         var banner = document.createElement('div');
         banner.id = 'wcof-install-banner';
-        var button = document.createElement('button');
-        button.id = 'wcof-install-button';
-        button.textContent = (window.wcofPwaPrompt && window.wcofPwaPrompt.text) ? window.wcofPwaPrompt.text : 'Download the app';
-        banner.appendChild(button);
-        document.body.appendChild(banner);
-        button.addEventListener('click', function(){
-            banner.parentNode.removeChild(banner);
-            if(deferredPrompt){
+
+        if(deferredPrompt){
+            var button = document.createElement('button');
+            button.id = 'wcof-install-button';
+            button.textContent = (window.wcofPwaPrompt && window.wcofPwaPrompt.text) ? window.wcofPwaPrompt.text : 'Download the app';
+            banner.appendChild(button);
+            button.addEventListener('click', function(){
+                banner.parentNode.removeChild(banner);
                 deferredPrompt.prompt();
                 deferredPrompt = null;
-            }
-        });
+            });
+            document.body.appendChild(banner);
+        }else if(window.wcofPwaPrompt && window.wcofPwaPrompt.manual){
+            var info = document.createElement('p');
+            info.id = 'wcof-install-instructions';
+            info.textContent = window.wcofPwaPrompt.manual;
+            banner.appendChild(info);
+            document.body.appendChild(banner);
+        }
     }
 
     window.addEventListener('beforeinstallprompt', function(e){

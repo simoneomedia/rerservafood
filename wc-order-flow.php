@@ -213,12 +213,13 @@ if(!empty($s['pwa_icon'])){
 echo '<link rel="apple-touch-icon" href="'.esc_url($s['pwa_icon']).'" />' . "\n";
 }
 if(!empty($s['pwa_prompt'])){
-wp_enqueue_script('wcof-pwa-install', plugins_url('assets/pwa-install-prompt.js', __FILE__), [], '1.0', true);
-wp_localize_script('wcof-pwa-install', 'wcofPwaPrompt', [
-'text'=> $s['pwa_prompt_text']? $s['pwa_prompt_text']:esc_html__('Download the app','wc-order-flow')
-]);
-echo '<link rel="stylesheet" href="'.esc_url(plugins_url('assets/pwa-install-prompt.css', __FILE__)).'" />' . "\n";
-}
+        wp_enqueue_script('wcof-pwa-install', plugins_url('assets/pwa-install-prompt.js', __FILE__), [], '1.0', true);
+        wp_localize_script('wcof-pwa-install', 'wcofPwaPrompt', [
+        'text'=> $s['pwa_prompt_text']? $s['pwa_prompt_text']:esc_html__('Download the app','wc-order-flow'),
+        'manual'=> esc_html__('Add this page to your home screen via your browser menu','wc-order-flow')
+        ]);
+        echo '<link rel="stylesheet" href="'.esc_url(plugins_url('assets/pwa-install-prompt.css', __FILE__)).'" />' . "\n";
+        }
 }
 
     /* Avoid any 301/302 on SW files — redirects break registration */
