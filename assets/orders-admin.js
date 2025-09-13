@@ -59,9 +59,10 @@
     const phone = htmlEscape(o.phone||'');
     const note = htmlEscape(o.note||'');
     const payment = htmlEscape(o.payment||'');
-    const metaHtml = o.meta && typeof o.meta === 'object'
-      ? Object.keys(o.meta).map(k=>`<div><strong>${htmlEscape(k)}:</strong> ${htmlEscape(o.meta[k])}</div>`).join('')
-      : '';
+    const meta = o.meta && typeof o.meta === 'object' ? Object.assign({}, o.meta) : {};
+    const tip = meta._wcof_tip; if(tip!==undefined){ delete meta._wcof_tip; }
+    const sched = meta._wcof_scheduled_time; if(sched!==undefined){ delete meta._wcof_scheduled_time; }
+    const metaHtml = Object.keys(meta).map(k=>`<div><strong>${htmlEscape(k)}:</strong> ${htmlEscape(meta[k])}</div>`).join('');
     return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
         <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}" style="grid-row:1 / span 3"></div>
@@ -78,6 +79,8 @@
 
             <div><strong>Telefono:</strong> ${phone} ${o.phone?`<a class=\"btn btn-phone\" href=\"tel:${encodeURIComponent(o.phone)}\" target=\"_blank\">\u260E\ufe0f</a>`:''}</div>
             ${payment?`<div><strong>Payment:</strong> ${payment}</div>`:''}
+            ${tip?`<div><strong>Tip:</strong> ${htmlEscape(tip)}</div>`:''}
+            ${sched?`<div><strong>Scheduled time:</strong> ${htmlEscape(sched)}</div>`:''}
             <div><strong>Note:</strong> ${note || '—'}</div>
             ${metaHtml}
           </div>

@@ -14,6 +14,7 @@ if (!defined('ABSPATH')) exit;
 
 final class WCOF_Plugin {
     const OPTION_KEY = 'wcof_settings';
+    const LICENSE_STATUS_KEY = 'wcof_license_status';
     const META_ETA   = '_wcof_eta_minutes';
     const META_ARRIVAL = '_wcof_arrival_ts';
     const META_DECIDED = '_wcof_decided';
@@ -25,7 +26,7 @@ final class WCOF_Plugin {
         $self = new self();
         $self->register_sw_rewrite();
         if( !get_option('wcof_setup_done') ) add_option('wcof_setup_done', 0);
-        add_role('rider', 'Rider', ['read'=>true,'wcof_rider'=>true]);
+        add_role('rider', __('Rider', 'wc-order-flow'), ['read'=>true,'wcof_rider'=>true]);
         flush_rewrite_rules();
 
         // Switch checkout page to classic shortcode
@@ -47,10 +48,17 @@ final class WCOF_Plugin {
         update_option('woocommerce_enable_cart_checkout_blocks', 'no');
         update_option('woocommerce_blocks_cart_checkout_enabled', 'no');
         update_option('woocommerce_cart_checkout_blocks_enabled', 'no');
+
+        if( !wp_next_scheduled('wcof_check_license') ){
+            wp_schedule_event(time(), 'daily', 'wcof_check_license');
+        }
+        $self->validate_license();
     }
     public static function deactivate(){
         remove_role('rider');
         flush_rewrite_rules();
+        $timestamp = wp_next_scheduled('wcof_check_license');
+        if($timestamp) wp_unschedule_event($timestamp, 'wcof_check_license');
     }
 
     public function __construct() {
@@ -134,6 +142,12 @@ final class WCOF_Plugin {
         // Push shortcodes (button + debug)
         add_shortcode('wcof_push_button', [$this,'shortcode_push_button']);
         add_shortcode('wcof_push_debug',  [$this,'shortcode_push_debug']);
+
+        add_action('wcof_check_license', [$this,'validate_license']);
+        add_action('admin_notices', [$this,'maybe_license_notice']);
+ 
+        add_action('woocommerce_account_dashboard', [$this,'account_push_button']);
+
     }
 
     /* ===== Service workers via rewrite to site root ===== */
@@ -432,7 +446,7 @@ final class WCOF_Plugin {
                 $set=$this->settings();
                 if(empty($set['rider_see_processing']) && $o->has_status('processing')) wp_die(__('Unauthorized', 'wc-order-flow'));
             }
-            $o->update_status('completed','Consegna completata.');
+            $o->update_status('completed', __('Delivery completed.', 'wc-order-flow'));
             $o->save();
         }
         wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url('post.php?post='.$order_id.'&action=edit')); exit;
@@ -893,26 +907,26 @@ final class WCOF_Plugin {
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-bottom:24px">
             <?php wp_nonce_field('wcof_save_store'); ?>
             <input type="hidden" name="action" value="wcof_save_store"/>
-            <h2>Store settings</h2>
-            <p><label>Address<br/><input type="text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></label></p>
-            <p>Opening days:<br/>
-              <?php foreach(['mon'=>'Mon','tue'=>'Tue','wed'=>'Wed','thu'=>'Thu','fri'=>'Fri','sat'=>'Sat','sun'=>'Sun'] as $k=>$lbl): ?>
+            <h2><?php esc_html_e('Store settings', 'wc-order-flow'); ?></h2>
+            <p><label><?php esc_html_e('Address', 'wc-order-flow'); ?><br/><input type="text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></label></p>
+            <p><?php esc_html_e('Opening days', 'wc-order-flow'); ?>:<br/>
+              <?php foreach(['mon'=>__('Mon','wc-order-flow'),'tue'=>__('Tue','wc-order-flow'),'wed'=>__('Wed','wc-order-flow'),'thu'=>__('Thu','wc-order-flow'),'fri'=>__('Fri','wc-order-flow'),'sat'=>__('Sat','wc-order-flow'),'sun'=>__('Sun','wc-order-flow')] as $k=>$lbl): ?>
                 <label style="margin-right:8px"><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_days][]" value="<?php echo esc_attr($k); ?>" <?php checked(in_array($k,$s['open_days'],true)); ?>/> <?php echo esc_html($lbl); ?></label>
               <?php endforeach; ?>
             </p>
-            <p><label>Opening time <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></label></p>
-            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> Store closed</label></p>
-            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> Riders can see processing</label></p>
-            <p><button type="submit">Save settings</button></p>
+            <p><label><?php esc_html_e('Opening time', 'wc-order-flow'); ?> <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></label></p>
+            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Store closed', 'wc-order-flow'); ?></label></p>
+            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></label></p>
+            <p><button type="submit"><?php esc_html_e('Save settings', 'wc-order-flow'); ?></button></p>
           </form>
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <?php wp_nonce_field('wcof_add_rider'); ?>
             <input type="hidden" name="action" value="wcof_add_rider"/>
-            <h2>Add rider</h2>
-            <p><input type="text" name="rider_user" placeholder="Username" required/></p>
-            <p><input type="email" name="rider_email" placeholder="Email" required/></p>
-            <p><input type="password" name="rider_pass" placeholder="Password" required/></p>
-            <p><button type="submit">Add rider</button></p>
+            <h2><?php esc_html_e('Add rider', 'wc-order-flow'); ?></h2>
+            <p><input type="text" name="rider_user" placeholder="<?php esc_attr_e('Username', 'wc-order-flow'); ?>" required/></p>
+            <p><input type="email" name="rider_email" placeholder="<?php esc_attr_e('Email', 'wc-order-flow'); ?>" required/></p>
+            <p><input type="password" name="rider_pass" placeholder="<?php esc_attr_e('Password', 'wc-order-flow'); ?>" required/></p>
+            <p><button type="submit"><?php esc_html_e('Add rider', 'wc-order-flow'); ?></button></p>
           </form>
         </div>
         <?php return ob_get_clean();
@@ -949,6 +963,7 @@ final class WCOF_Plugin {
     /* ===== Settings page ===== */
     public function admin_menu(){
         add_submenu_page('woocommerce','ReeservaFood','ReeservaFood','manage_woocommerce','wcof-settings',[$this,'settings_page']);
+        add_submenu_page('woocommerce','WCOF Analytics','WCOF Analytics','manage_woocommerce','wcof-analytics',[$this,'analytics_page']);
         add_submenu_page(null,'ReeservaFood Setup','ReeservaFood Setup','manage_woocommerce','wcof-setup',[$this,'setup_page']);
     }
     public function register_settings(){
@@ -973,6 +988,7 @@ final class WCOF_Plugin {
             'enable'=>!empty($v['enable'])?1:0,
             'app_id'=>isset($v['app_id'])?sanitize_text_field($v['app_id']):'',
             'rest_key'=>isset($v['rest_key'])?sanitize_text_field($v['rest_key']):'',
+            'license_key'=>isset($v['license_key'])?sanitize_text_field($v['license_key']):'',
             'notify_admin_new'=>!empty($v['notify_admin_new'])?1:0,
             'notify_user_processing'=>!empty($v['notify_user_processing'])?1:0,
             'notify_user_out'=>!empty($v['notify_user_out'])?1:0,
@@ -996,11 +1012,41 @@ final class WCOF_Plugin {
     public function settings(){
         $d=get_option(self::OPTION_KEY,[]);
         return wp_parse_args($d,[
-            'enable'=>0,'app_id'=>'','rest_key'=>'',
+            'enable'=>0,'app_id'=>'','rest_key'=>'','license_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
             'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto'
         ]);
+    }
+
+    public function validate_license(){
+        $key = $this->settings()['license_key'];
+        if(!$key){
+            update_option(self::LICENSE_STATUS_KEY, 'invalid');
+            return false;
+        }
+        $response = wp_remote_get('https://license.example.com/validate?license_key=' . urlencode($key), ['timeout'=>15]);
+        if(is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200){
+            update_option(self::LICENSE_STATUS_KEY, 'invalid');
+            return false;
+        }
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        if(!empty($data['valid'])){
+            update_option(self::LICENSE_STATUS_KEY, 'valid');
+            return true;
+        }
+        update_option(self::LICENSE_STATUS_KEY, 'invalid');
+        return false;
+    }
+
+    public function is_license_valid(){
+        return get_option(self::LICENSE_STATUS_KEY) === 'valid';
+    }
+
+    public function maybe_license_notice(){
+        if( !current_user_can('manage_woocommerce') ) return;
+        if( $this->is_license_valid() ) return;
+        echo '<div class="notice notice-error"><p>'.esc_html__('ReeservaFood license is invalid or expired. Some features are disabled.', 'wc-order-flow').'</p></div>';
     }
 
     public function delivery_postal_codes(){
@@ -1041,12 +1087,16 @@ final class WCOF_Plugin {
         $addr_value  = '';
         $town_value  = '';
         $door_value  = '';
+        $tip_value   = '';
+        $time_value  = '';
         $resolved_value = '';
         $coords_value   = '';
         if( $checkout && method_exists($checkout, 'get_value') ){
             $addr_value    = $checkout->get_value('wcof_delivery_address');
             $town_value    = $checkout->get_value('wcof_delivery_town');
             $door_value    = $checkout->get_value('wcof_delivery_door');
+            $tip_value     = $checkout->get_value('wcof_tip');
+            $time_value    = $checkout->get_value('wcof_scheduled_time');
             $resolved_value = $checkout->get_value('wcof_delivery_resolved');
             $coords_value   = $checkout->get_value('wcof_delivery_coords');
         }
@@ -1165,6 +1215,19 @@ final class WCOF_Plugin {
             'required' => false,
             'label'    => __('Apartment or Door #','wc-order-flow'),
         ], $door_value);
+        woocommerce_form_field('wcof_tip', [
+            'type'     => 'number',
+            'class'    => [ 'form-row-first' ],
+            'required' => false,
+            'label'    => __('Tip amount','wc-order-flow'),
+            'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+        ], $tip_value);
+        woocommerce_form_field('wcof_scheduled_time', [
+            'type'     => 'time',
+            'class'    => [ 'form-row-last' ],
+            'required' => false,
+            'label'    => __('Desired delivery time','wc-order-flow'),
+        ], $time_value);
         // Error message container shown when the typed address is
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
@@ -1268,6 +1331,8 @@ final class WCOF_Plugin {
         $town = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
         $addr = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
         $door = isset($_POST['wcof_delivery_door']) ? sanitize_text_field($_POST['wcof_delivery_door']) : '';
+        $tip  = isset($_POST['wcof_tip']) ? floatval($_POST['wcof_tip']) : '';
+        $time = isset($_POST['wcof_scheduled_time']) ? sanitize_text_field($_POST['wcof_scheduled_time']) : '';
         if($town !== ''){
             $order->update_meta_data('_wcof_delivery_town', $town);
         }
@@ -1291,6 +1356,12 @@ final class WCOF_Plugin {
                 $order->update_meta_data('_wcof_delivery_coords', $coords);
             }
         }
+        if($tip !== '' && $tip >= 0){
+            $order->update_meta_data('_wcof_tip', wc_format_decimal($tip));
+        }
+        if($time !== ''){
+            $order->update_meta_data('_wcof_scheduled_time', $time);
+        }
         $order->save();
     }
 
@@ -1298,6 +1369,8 @@ final class WCOF_Plugin {
         $typed    = $order->get_meta('_wcof_delivery_address');
         $resolved = $order->get_meta('_wcof_delivery_resolved');
         $coords   = $order->get_meta('_wcof_delivery_coords');
+        $tip      = $order->get_meta('_wcof_tip');
+        $time     = $order->get_meta('_wcof_scheduled_time');
         if($typed){
             echo '<p><strong>'.esc_html__('Address','wc-order-flow').':</strong> '.esc_html($typed).'</p>';
         }
@@ -1306,6 +1379,12 @@ final class WCOF_Plugin {
         }
         if($coords){
             echo '<p><strong>'.esc_html__('Coordinates','wc-order-flow').':</strong> '.esc_html($coords).'</p>';
+        }
+        if($tip !== ''){
+            echo '<p><strong>'.esc_html__('Tip','wc-order-flow').':</strong> '.wc_price($tip, ['currency'=>$order->get_currency()]).'</p>';
+        }
+        if($time){
+            echo '<p><strong>'.esc_html__('Scheduled time','wc-order-flow').':</strong> '.esc_html($time).'</p>';
         }
     }
 
@@ -1328,6 +1407,8 @@ final class WCOF_Plugin {
         $typed    = $order->get_meta('_wcof_delivery_address');
         $resolved = $order->get_meta('_wcof_delivery_resolved');
         $coords   = $order->get_meta('_wcof_delivery_coords');
+        $tip      = $order->get_meta('_wcof_tip');
+        $time     = $order->get_meta('_wcof_scheduled_time');
         if($typed){
             $fields['wcof_delivery_address'] = [
                 'label' => __('Address','wc-order-flow'),
@@ -1346,16 +1427,33 @@ final class WCOF_Plugin {
                 'value' => $coords,
             ];
         }
+        if($tip !== ''){
+            $fields['wcof_tip'] = [
+                'label' => __('Tip','wc-order-flow'),
+                'value' => wc_price($tip, ['currency'=>$order->get_currency()]),
+            ];
+        }
+        if($time){
+            $fields['wcof_scheduled_time'] = [
+                'label' => __('Scheduled time','wc-order-flow'),
+                'value' => $time,
+            ];
+        }
         return $fields;
     }
 
     public function settings_page(){
         $s=$this->settings(); ?>
         <div class="wrap">
-          <h1>ReeservaFood Settings</h1>
+          <h1><?php esc_html_e('ReeservaFood Settings', 'wc-order-flow'); ?></h1>
           <form method="post" action="options.php">
             <?php settings_fields(self::OPTION_KEY); ?>
+            <h2>License</h2>
+            <table class="form-table" role="presentation">
+              <tr><th scope="row">License Key</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[license_key]" value="<?php echo esc_attr($s['license_key']); ?>"/></td></tr>
+            </table>
             <h2>Store</h2>
+
             <table class="form-table" role="presentation">
               <tr><th scope="row">Address</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
               <tr><th scope="row">Delivery postal codes</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[postal_codes]" value="<?php echo esc_attr($s['postal_codes']); ?>" placeholder="e.g. 00100,00101"/></td></tr>
@@ -1365,6 +1463,7 @@ final class WCOF_Plugin {
                 <input type="hidden" name="<?php echo esc_attr(self::OPTION_KEY); ?>[delivery_polygon]" id="wcof_delivery_polygon" value="<?php echo esc_attr($s['delivery_polygon']); ?>"/>
                 <p class="description">Draw the allowed delivery area.</p>
               </td></tr>
+
               <tr><th scope="row"><?php esc_html_e('Language', 'wc-order-flow'); ?></th><td>
                 <select name="<?php echo esc_attr(self::OPTION_KEY); ?>[language]">
                   <option value="auto" <?php selected($s['language'],'auto'); ?>><?php esc_html_e('Automatic', 'wc-order-flow'); ?></option>
@@ -1374,7 +1473,7 @@ final class WCOF_Plugin {
                 </select>
               </td></tr>
               <tr><th scope="row"><?php esc_html_e('Opening days', 'wc-order-flow'); ?></th><td>
-                <?php foreach(['mon'=>'Mon','tue'=>'Tue','wed'=>'Wed','thu'=>'Thu','fri'=>'Fri','sat'=>'Sat','sun'=>'Sun'] as $k=>$lbl): ?>
+                <?php foreach(['mon'=>__('Mon','wc-order-flow'),'tue'=>__('Tue','wc-order-flow'),'wed'=>__('Wed','wc-order-flow'),'thu'=>__('Thu','wc-order-flow'),'fri'=>__('Fri','wc-order-flow'),'sat'=>__('Sat','wc-order-flow'),'sun'=>__('Sun','wc-order-flow')] as $k=>$lbl): ?>
                   <label style="margin-right:8px"><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_days][]" value="<?php echo esc_attr($k); ?>" <?php checked(in_array($k,$s['open_days'],true)); ?>/> <?php echo esc_html($lbl); ?></label>
                 <?php endforeach; ?>
               </td></tr>
@@ -1382,13 +1481,13 @@ final class WCOF_Plugin {
               <tr><th scope="row"><?php esc_html_e('Store closed', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
               <tr><th scope="row"><?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
             </table>
-            <h2>OneSignal</h2>
+            <h2><?php esc_html_e('OneSignal', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
               <tr><th scope="row"><?php esc_html_e('Enable push', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[enable]" value="1" <?php checked($s['enable'],1); ?>/> <?php esc_html_e('On', 'wc-order-flow'); ?></label></td></tr>
               <tr><th scope="row"><?php esc_html_e('OneSignal App ID', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[app_id]" value="<?php echo esc_attr($s['app_id']); ?>" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"/></td></tr>
               <tr><th scope="row"><?php esc_html_e('OneSignal REST API Key', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rest_key]" value="<?php echo esc_attr($s['rest_key']); ?>" placeholder="REST API Key (server)"/></td></tr>
             </table>
-            <h2>Notify on</h2>
+            <h2><?php esc_html_e('Notify on', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
               <tr><th><?php esc_html_e('Admin', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_admin_new]" value="1" <?php checked($s['notify_admin_new'],1); ?>/> <?php esc_html_e('New order', 'wc-order-flow'); ?></label></td></tr>
               <tr><th><?php esc_html_e('User', 'wc-order-flow'); ?></th><td>
@@ -1398,8 +1497,27 @@ final class WCOF_Plugin {
             </table>
             <?php submit_button(); ?>
           </form>
-          <p><em>Service worker files are auto-served at <code>/OneSignalSDKWorker.js</code> and <code>/OneSignalSDKUpdaterWorker.js</code> via WordPress rewrites (no physical files needed).</em></p>
-          <p><strong>Shortcodes</strong>: <code>[wcof_orders_admin]</code> (orders board), <code>[wcof_product_manager]</code> (product manager), <code>[wcof_push_button]</code> (subscribe button), <code>[wcof_push_debug]</code> (admin diagnostics).</p>
+          <?php
+            printf(
+              '<p><em>%s</em></p>',
+              sprintf(
+                wp_kses(
+                  __('Service worker files are auto-served at %1$s and %2$s via WordPress rewrites (no physical files needed).', 'wc-order-flow'),
+                  ['code'=>[]]
+                ),
+                '<code>/OneSignalSDKWorker.js</code>',
+                '<code>/OneSignalSDKUpdaterWorker.js</code>'
+              )
+            );
+            printf(
+              '<p><strong>%s</strong>: <code>[wcof_orders_admin]</code> (%s), <code>[wcof_product_manager]</code> (%s), <code>[wcof_push_button]</code> (%s), <code>[wcof_push_debug]</code> (%s).</p>',
+              esc_html__('Shortcodes', 'wc-order-flow'),
+              esc_html__('orders board', 'wc-order-flow'),
+              esc_html__('product manager', 'wc-order-flow'),
+              esc_html__('subscribe button', 'wc-order-flow'),
+              esc_html__('admin diagnostics', 'wc-order-flow')
+            );
+          ?>
         </div>
         <?php
     }
@@ -1417,30 +1535,36 @@ final class WCOF_Plugin {
     public function setup_notice(){
         $url = esc_url(admin_url('admin.php?page=wcof-setup'));
         echo '<div class="notice notice-warning"><p>';
-        echo 'Please complete the <a href="'.$url.'">ReeservaFood setup</a>.';
+        printf(
+            wp_kses(
+                __('Please complete the <a href="%s">ReeservaFood setup</a>.', 'wc-order-flow'),
+                ['a' => ['href' => []]]
+            ),
+            $url
+        );
         echo '</p></div>';
     }
 
     public function setup_page(){
         $s=$this->settings(); ?>
         <div class="wrap">
-          <h1>Welcome to ReeservaFood</h1>
-          <p>Let's configure your store.</p>
+          <h1><?php esc_html_e('Welcome to ReeservaFood', 'wc-order-flow'); ?></h1>
+          <p><?php esc_html_e("Let's configure your store.", 'wc-order-flow'); ?></p>
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <?php wp_nonce_field('wcof_finish_setup'); ?>
             <input type="hidden" name="action" value="wcof_finish_setup"/>
             <table class="form-table" role="presentation">
-              <tr><th scope="row">Shop address</th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
-              <tr><th scope="row">Opening days</th><td>
-                <?php foreach(['mon'=>'Mon','tue'=>'Tue','wed'=>'Wed','thu'=>'Thu','fri'=>'Fri','sat'=>'Sat','sun'=>'Sun'] as $k=>$lbl): ?>
+              <tr><th scope="row"><?php esc_html_e('Shop address', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[address]" value="<?php echo esc_attr($s['address']); ?>"/></td></tr>
+              <tr><th scope="row"><?php esc_html_e('Opening days', 'wc-order-flow'); ?></th><td>
+                <?php foreach(['mon'=>__('Mon','wc-order-flow'),'tue'=>__('Tue','wc-order-flow'),'wed'=>__('Wed','wc-order-flow'),'thu'=>__('Thu','wc-order-flow'),'fri'=>__('Fri','wc-order-flow'),'sat'=>__('Sat','wc-order-flow'),'sun'=>__('Sun','wc-order-flow')] as $k=>$lbl): ?>
                   <label style="margin-right:8px"><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_days][]" value="<?php echo esc_attr($k); ?>" <?php checked(in_array($k,$s['open_days'],true)); ?>/> <?php echo esc_html($lbl); ?></label>
                 <?php endforeach; ?>
               </td></tr>
-              <tr><th scope="row">Opening time</th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
-              <tr><th scope="row">Products</th><td><a href="<?php echo esc_url(admin_url('edit.php?post_type=product')); ?>" class="button">Manage products</a></td></tr>
+              <tr><th scope="row"><?php esc_html_e('Opening time', 'wc-order-flow'); ?></th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
+              <tr><th scope="row"><?php esc_html_e('Products', 'wc-order-flow'); ?></th><td><a href="<?php echo esc_url(admin_url('edit.php?post_type=product')); ?>" class="button"><?php esc_html_e('Manage products', 'wc-order-flow'); ?></a></td></tr>
             </table>
-            <?php submit_button('Start Selling now','primary','start'); ?>
-            <?php submit_button('Keep the store closed for now','secondary','keep'); ?>
+            <?php submit_button(__('Start Selling now', 'wc-order-flow'),'primary','start'); ?>
+            <?php submit_button(__('Keep the store closed for now', 'wc-order-flow'),'secondary','keep'); ?>
           </form>
         </div>
         <?php
@@ -1459,8 +1583,81 @@ final class WCOF_Plugin {
         exit;
     }
 
+    /* ===== Analytics ===== */
+    public function analytics_page(){
+        if(isset($_GET['wcof_export']) && $_GET['wcof_export']){
+            $this->export_analytics_csv();
+            return;
+        }
+        $data = $this->analytics_data();
+        echo '<div class="wrap"><h1>WCOF Analytics</h1>';
+        echo '<p><strong>Total sales:</strong> '.esc_html($data['total_sales_fmt']).'</p>';
+        echo '<p><strong>Average ETA:</strong> '.esc_html($data['avg_eta']).' min</p>';
+        echo '<p><strong>Average delivery time:</strong> '.esc_html($data['avg_delivery']).' min</p>';
+        echo '<canvas id="wcof-analytics-chart" height="200"></canvas>';
+        echo '<p><a class="button" href="'.esc_url(add_query_arg('wcof_export','1')).'">Export CSV</a></p>';
+        echo '</div>';
+        wp_enqueue_script('chartjs','https://cdn.jsdelivr.net/npm/chart.js',[], '4.4.0', true);
+        wp_enqueue_script('wcof-analytics', plugins_url('assets/analytics.js', __FILE__), ['chartjs'], '1.0', true);
+        wp_localize_script('wcof-analytics','WCOF_ANALYTICS', [
+            'topProducts' => $data['top_products'],
+        ]);
+    }
+
+    private function analytics_data(){
+        global $wpdb;
+        $after = gmdate('Y-m-d H:i:s', strtotime('-30 days'));
+        $posts = $wpdb->posts;
+        $postmeta = $wpdb->postmeta;
+        $order_items = $wpdb->prefix.'woocommerce_order_items';
+        $order_itemmeta = $wpdb->prefix.'woocommerce_order_itemmeta';
+        $statuses = "('wc-completed','wc-processing','wc-out-for-delivery')";
+
+        $sales = $wpdb->get_var($wpdb->prepare("SELECT SUM(pm.meta_value) FROM $postmeta pm JOIN $posts p ON p.ID=pm.post_id WHERE pm.meta_key='_order_total' AND p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s", $after));
+        $avg_eta = $wpdb->get_var($wpdb->prepare("SELECT AVG(pm.meta_value) FROM $postmeta pm JOIN $posts p ON p.ID=pm.post_id WHERE pm.meta_key=%s AND p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s", self::META_ETA, $after));
+        $avg_delivery = $wpdb->get_var($wpdb->prepare("SELECT AVG((arr.meta_value - UNIX_TIMESTAMP(p.post_date))/60) FROM $postmeta arr JOIN $posts p ON p.ID=arr.post_id WHERE arr.meta_key=%s AND arr.meta_value>0 AND p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s", self::META_ARRIVAL, $after));
+
+        $top_rows = $wpdb->get_results($wpdb->prepare("SELECT pid.meta_value as product_id, SUM(qty.meta_value) as qty FROM $order_items oi JOIN $order_itemmeta pid ON oi.order_item_id=pid.order_item_id AND pid.meta_key='_product_id' JOIN $order_itemmeta qty ON oi.order_item_id=qty.order_item_id AND qty.meta_key='_qty' JOIN $posts p ON oi.order_id=p.ID WHERE p.post_type='shop_order' AND p.post_status IN $statuses AND p.post_date >= %s GROUP BY product_id ORDER BY qty DESC LIMIT 5", $after));
+        $top_products = [];
+        if($top_rows){
+            foreach($top_rows as $row){
+                $top_products[] = [
+                    'name' => get_the_title($row->product_id),
+                    'qty'  => intval($row->qty),
+                ];
+            }
+        }
+
+        return [
+            'total_sales'     => floatval($sales),
+            'total_sales_fmt' => function_exists('wc_price') ? wc_price($sales) : $sales,
+            'avg_eta'         => $avg_eta ? round($avg_eta,1) : 0,
+            'avg_delivery'    => $avg_delivery ? round($avg_delivery,1) : 0,
+            'top_products'    => $top_products,
+        ];
+    }
+
+    private function export_analytics_csv(){
+        if(!current_user_can('manage_woocommerce')) wp_die(__('Unauthorized', 'wc-order-flow'));
+        $data = $this->analytics_data();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=wcof-analytics.csv');
+        $out = fopen('php://output','w');
+        fputcsv($out, ['Total sales', $data['total_sales']]);
+        fputcsv($out, ['Average ETA', $data['avg_eta']]);
+        fputcsv($out, ['Average delivery time', $data['avg_delivery']]);
+        fputcsv($out, []);
+        fputcsv($out, ['Top product', 'Quantity']);
+        foreach($data['top_products'] as $p){
+            fputcsv($out, [$p['name'], $p['qty']]);
+        }
+        fclose($out);
+        exit;
+    }
+
     /* ===== OneSignal init + push senders ===== */
     public function maybe_inject_onesignal_sdk(){
+        if( !$this->is_license_valid() ) return;
         $s = $this->settings();
         if( empty($s['enable']) || empty($s['app_id']) ) return;
         wp_enqueue_script('wcof-onesignal', plugins_url('assets/onesignal-init.js', __FILE__), [], '1.9.0', true);
@@ -1472,6 +1669,7 @@ final class WCOF_Plugin {
     }
 
     private function push_send($payload){
+        if( !$this->is_license_valid() ) return;
         $s = $this->settings();
         if( empty($s['enable']) || empty($s['app_id']) || empty($s['rest_key']) ) return;
         $payload['app_id'] = $s['app_id'];
@@ -1508,6 +1706,8 @@ final class WCOF_Plugin {
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'ETA ~ '.$eta.' min','es'=>'ETA ~ '.$eta.' min','it'=>'ETA ~ '.$eta.' min'],
             'url'=>$url,
+            // Target the purchasing user via external ID and role tag
+            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'user' ] ],
             'include_external_user_ids' => [ (string)$uid ],
             'ttl'=>300
         ]);
@@ -1521,6 +1721,7 @@ final class WCOF_Plugin {
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'Entrega en curso','es'=>'Entrega en curso','it'=>'Consegna in corso'],
             'url'=>$url,
+            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'user' ] ],
             'include_external_user_ids' => [ (string)$uid ],
             'ttl'=>300
         ]);
@@ -1740,10 +1941,12 @@ final class WCOF_Plugin {
             if($intersect) $inside = !$inside;
         }
         return $inside;
+
     }
 
     /* ===== Push shortcodes ===== */
     public function shortcode_push_button($atts=[]){
+        if( !$this->is_license_valid() ) return '';
         if( empty($this->settings()['enable']) ) return '';
         wp_enqueue_script('wcof-push-btn', plugins_url('assets/push-button.js', __FILE__), [], '1.9.0', true);
         ob_start(); ?>
@@ -1756,6 +1959,7 @@ final class WCOF_Plugin {
     }
     public function shortcode_push_debug($atts=[]){
         if(!current_user_can('manage_woocommerce')) return '';
+        if( !$this->is_license_valid() ) return '<em>License invalid.</em>';
         if( empty($this->settings()['enable']) ) return '<em>Enable push in settings first.</em>';
         wp_enqueue_script('wcof-push-debug', plugins_url('assets/push-debug.js', __FILE__), [], '1.9.0', true);
         return '<div id="wcof-push-debug" style="padding:12px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc"></div>';
