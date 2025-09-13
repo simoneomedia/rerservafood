@@ -939,6 +939,7 @@ final class WCOF_Plugin {
         $input=$_POST[self::OPTION_KEY]??[];
         $opts=array_merge($current,$this->sanitize_settings($input));
         update_option(self::OPTION_KEY,$opts);
+        $this->validate_license();
         wp_safe_redirect(wp_get_referer()?wp_get_referer():admin_url());
         exit;
     }
@@ -1578,6 +1579,7 @@ final class WCOF_Plugin {
         $opts=array_merge($current,$this->sanitize_settings($input));
         $opts['store_closed']=isset($_POST['start'])?0:1;
         update_option(self::OPTION_KEY,$opts);
+        $this->validate_license();
         update_option('wcof_setup_done',1);
         wp_safe_redirect(admin_url('admin.php?page=wcof-settings'));
         exit;
