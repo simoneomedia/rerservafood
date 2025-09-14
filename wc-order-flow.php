@@ -22,6 +22,8 @@ final class WCOF_Plugin {
     const STATUS_AWAITING = 'wc-on-hold';
     const STATUS_OUT_FOR_DELIVERY = 'wc-out-for-delivery';
 
+    private $version;
+
     public static function activate(){
         $self = new self();
         $self->register_sw_rewrite();
@@ -62,6 +64,8 @@ final class WCOF_Plugin {
     }
 
     public function __construct() {
+        $data = get_file_data(__FILE__, ['Version' => 'Version'], false);
+        $this->version = $data['Version'] ?? null;
         add_filter('plugin_locale', [$this,'set_locale'], 10, 2);
         add_action('plugins_loaded', [$this,'load_textdomain']);
         add_action('init', [$this,'register_statuses']);
@@ -145,9 +149,13 @@ final class WCOF_Plugin {
 
         add_action('wcof_check_license', [$this,'validate_license']);
         add_action('admin_notices', [$this,'maybe_license_notice']);
- 
+
         add_action('woocommerce_account_dashboard', [$this,'account_push_button']);
 
+    }
+
+    private function enqueue_admin_style(){
+        wp_enqueue_style('wcof-admin', plugins_url('assets/admin.css', __FILE__), [], $this->version);
     }
 
 /* ===== Service worker via rewrite to site root ===== */
@@ -668,6 +676,7 @@ exit;
     public function shortcode_orders_admin($atts=[]){
         if(!(current_user_can('manage_woocommerce') || current_user_can('wcof_rider')))
             return '<div class="wcof-alert">'.esc_html__('Only administrators or riders can view this page.', 'wc-order-flow').'</div>';
+        $this->enqueue_admin_style();
         $args=['limit'=>50,'orderby'=>'date','order'=>'DESC','type'=>'shop_order','return'=>'objects'];
         if(!current_user_can('manage_woocommerce')){
             $set=$this->settings();
@@ -700,54 +709,6 @@ exit;
         });
         $last_id=0;
         ob_start(); ?>
-        <style>
-          :root{ --wcf-card:#ffffff; --wcf-border:#e5e7eb; --wcf-shadow:0 6px 24px rgba(15,23,42,.06); --wcf-muted:#475569;}
-          .wcof-wrap{display:flex;flex-direction:column;gap:18px}
-          .wcof-card{background:var(--wcf-card);border:1px solid var(--wcf-border);border-radius:18px;box-shadow:var(--wcf-shadow);overflow:hidden}
-          .wcof-head{display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px}
-          .wcof-left{grid-column:1/2;width:6px;height:100%;border-radius:6px;grid-row:1/span 3}
-          .st-await{background:linear-gradient(180deg,#fef08a,#facc15)}
-          .st-proc {background:linear-gradient(180deg,#fed7aa,#fb923c)}
-          .st-out  {background:linear-gradient(180deg,#bfdbfe,#60a5fa)}
-          .st-comp {background:linear-gradient(180deg,#a7f3d0,#10b981)}
-          .st-rej  {background:linear-gradient(180deg,#fecaca,#ef4444)}
-          .wcof-title{margin:0;font-weight:600}
-          .wcof-badge{display:inline-block;padding:.25rem .6rem;border-radius:8px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e293b;font-size:12px;margin-left:6px;font-weight:500}
-          .wcof-arrival{display:inline-block;padding:.35rem .6rem;border-radius:8px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-weight:600}
-          .wcof-items{grid-column:2/6;padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
-          .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end;grid-column:2/6}
-          .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:8px;padding:.5rem .55rem;font-size:14px}
-          .btn{border:none;border-radius:8px;padding:.5rem .85rem;font-weight:600;font-size:14px;color:#fff;cursor:pointer;transition:background .2s;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;text-decoration:none}
-          .btn-approve{background:#3b82f6} .btn-approve:hover{background:#2563eb}
-          .btn-reject{background:#94a3b8} .btn-reject:hover{background:#6b7280}
-          .btn-out{background:#f59e0b} .btn-out:hover{background:#d97706}
-          .btn-complete{background:#10b981} .btn-complete:hover{background:#059669}
-          .btn-toggle{background:#6b7280} .btn-toggle:hover{background:#4b5563}
-          .btn-map{background:#3b82f6} .btn-map:hover{background:#2563eb}
-          .btn-phone{background:#10b981} .btn-phone:hover{background:#059669}
-          .wcof-info{margin-top:8px;font-size:14px;color:#334155}
-          .wcof-info div{margin-top:4px}
-          .wcof-address-extra{font-size:12px;color:#64748b;margin-top:2px}
-          .wcof-map-buttons{margin-top:4px;display:flex;gap:4px;flex-wrap:wrap}
-          .wcof-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ececec}
-          .wcof-item:last-child{border-bottom:0}
-          .wcof-new{animation:wcofPulse 1s ease-in-out 5;background:#ecfdf5}
-          @keyframes wcofPulse{0%{background:#d1fae5}50%{background:#ecfdf5}100%{background:#d1fae5}}
-
-          @media (max-width: 760px){
-            .wcof-head{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:14px}
-            .wcof-left{display:none}
-            .wcof-eta{width:100%}
-            .btn{width:100%;padding:12px 14px;font-size:16px}
-            .wcof-actions{display:grid;grid-template-columns:1fr;gap:8px;width:100%}
-            .wcof-arrival{align-self:flex-start}
-            .wcof-title{font-size:16px}
-          }
-          @media (max-width: 380px){
-            .wcof-title{font-size:15px}
-          }
-          .wcof-sound{position:fixed;right:14px;bottom:14px;background:#111;color:#fff;border-radius:24px;padding:.6rem .95rem;cursor:pointer;opacity:.9;z-index:9999;display:none}
-        </style>
         <div id="wcof-order-list" class="wcof-wrap">
         <?php foreach($orders as $o): if(!$o instanceof WC_Order){ $o=wc_get_order($o); if(!$o) continue; }
             $id=$o->get_id(); if($id>$last_id)$last_id=$id; $status='wc-'.$o->get_status();
@@ -851,41 +812,13 @@ exit;
     /* ===== Product manager (front) ===== */
     public function shortcode_product_manager($atts=[]){
         if(!current_user_can('manage_woocommerce')) return '';
+        $this->enqueue_admin_style();
         wp_enqueue_script('wcof-product-manager', plugins_url('assets/product-manager.js', __FILE__), [], '1.9.1', true);
         wp_localize_script('wcof-product-manager', 'WCOF_PM', [
             'root'  => esc_url_raw( rest_url('wc/v3/') ),
             'nonce' => wp_create_nonce('wp_rest')
         ]);
         ob_start(); ?>
-        <style>
-          :root{--wcf-card:#ffffff;--wcf-border:#e5e7eb;--wcf-shadow:0 6px 24px rgba(15,23,42,.06);--wcf-accent:#3b82f6;--wcf-accent-light:#e0f2fe}
-          #wcof-product-manager{font-family:sans-serif;display:flex;flex-direction:column;gap:18px}
-          .wcof-cat{background:var(--wcf-card);border:1px solid var(--wcf-border);border-radius:18px;box-shadow:var(--wcf-shadow);overflow:hidden}
-          .wcof-cat-header{display:flex;justify-content:space-between;align-items:center;padding:14px;background:var(--wcf-accent-light);font-weight:700}
-          .wcof-prod-list{display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--wcf-accent-light);border-top:1px dashed var(--wcf-border)}
-          .wcof-prod{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#fff;border:1px solid var(--wcf-border);border-radius:12px;padding:10px}
-          .wcof-prod-title{font-weight:600}
-          .wcof-active{display:flex;align-items:center;gap:6px}
-          .btn{border:none;border-radius:12px;padding:.55rem .9rem;font-weight:700;color:#fff;cursor:pointer}
-          .btn-add{background:var(--wcf-accent)}
-          .btn-del{background:#ef4444}
-          .btn-edit{background:#10b981}
-          .wcof-form-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;justify-content:center;align-items:center;padding:20px;z-index:9999}
-          .wcof-prod-form{display:flex;flex-direction:column;gap:14px;background:#fff;padding:24px;border-radius:16px;box-shadow:var(--wcf-shadow);width:100%;max-width:600px}
-          .wcof-prod-form input,.wcof-prod-form textarea,.wcof-prod-form select{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:1rem;box-sizing:border-box}
-          .wcof-prod-form textarea{min-height:120px}
-          .wcof-prod-form textarea.wcof-allergens{min-height:80px}
-          .wcof-img-field{text-align:center;display:flex;flex-direction:column;gap:10px}
-          .wcof-img-preview{width:200px;height:200px;border-radius:12px;object-fit:cover;display:none;margin:0 auto}
-          .wcof-upload-btn{background:var(--wcf-accent);color:#fff;border:none;border-radius:8px;padding:.55rem .9rem;font-weight:700;cursor:pointer}
-          .wcof-prod-form button{padding:12px;background:var(--wcf-accent);color:#fff;border:none;border-radius:8px;font-size:1rem}
-          .wcof-switch{position:relative;display:inline-block;width:40px;height:22px}
-          .wcof-switch input{opacity:0;width:0;height:0}
-          .wcof-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#cbd5e1;transition:.2s;border-radius:22px}
-          .wcof-slider:before{position:absolute;content:"";height:18px;width:18px;left:2px;bottom:2px;background:#fff;transition:.2s;border-radius:50%}
-          .wcof-switch input:checked + .wcof-slider{background:#22c55e}
-          .wcof-switch input:checked + .wcof-slider:before{transform:translateX(18px)}
-        </style>
         <div id="wcof-product-manager"></div>
         <?php return ob_get_clean();
     }
@@ -893,20 +826,9 @@ exit;
     /* ===== Store settings + rider management (front) ===== */
     public function shortcode_store_settings($atts=[]){
         if(!current_user_can('manage_woocommerce')) return '';
+        $this->enqueue_admin_style();
         $s=$this->settings();
         ob_start(); ?>
-        <style>
-          :root{--wcf-card:#ffffff;--wcf-border:#e5e7eb;--wcf-shadow:0 6px 24px rgba(15,23,42,.06);--wcf-accent:#3b82f6;--wcf-accent-light:#e0f2fe}
-          .wcof-store-settings{font-family:sans-serif;max-width:600px;margin:0 auto;background:var(--wcf-accent-light);padding:24px;border-radius:16px;box-shadow:var(--wcf-shadow)}
-          .wcof-store-settings input[type=text],
-          .wcof-store-settings input[type=email],
-          .wcof-store-settings input[type=password],
-          .wcof-store-settings input[type=number],
-          .wcof-store-settings input[type=time],
-          .wcof-store-settings select{width:100%;padding:12px;border:1px solid var(--wcf-border);border-radius:8px;box-sizing:border-box}
-          .wcof-store-settings input[type=time]{width:auto;display:inline-block}
-          .wcof-store-settings button{padding:12px;background:var(--wcf-accent);color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer}
-        </style>
         <div class="wcof-store-settings">
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-bottom:24px">
             <?php wp_nonce_field('wcof_save_store'); ?>
