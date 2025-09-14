@@ -676,33 +676,130 @@ exit;
                 : ['out-for-delivery','completed'];
         }
         $orders = wc_get_orders($args);
-        // Sort orders: awaiting first (newest), then processing (oldest first),
-        // then out for delivery and completed
-        usort($orders, function($a,$b){
-            if(!$a instanceof WC_Order) $a = wc_get_order($a);
-            if(!$b instanceof WC_Order) $b = wc_get_order($b);
-            if(!$a || !$b) return 0;
-            $order = [
-                self::STATUS_AWAITING       => 0,
-                'wc-processing'             => 1,
-                self::STATUS_OUT_FOR_DELIVERY => 2,
-                'wc-completed'              => 3,
-            ];
-            $sa = 'wc-'.$a->get_status();
-            $sb = 'wc-'.$b->get_status();
-            $pa = $order[$sa] ?? 99;
-            $pb = $order[$sb] ?? 99;
-            if($pa !== $pb) return $pa <=> $pb;
-            $ida = (int)$a->get_id();
-            $idb = (int)$b->get_id();
-            if($sa === self::STATUS_AWAITING) return $idb <=> $ida; // newest first
-            return $ida <=> $idb; // oldest first
-        });
+        $groups = [
+            self::STATUS_AWAITING => [],
+            'wc-processing' => [],
+            self::STATUS_OUT_FOR_DELIVERY => [],
+            'wc-completed' => [],
+        ];
         $last_id=0;
+        foreach($orders as $o){
+            if(!$o instanceof WC_Order){ $o = wc_get_order($o); if(!$o) continue; }
+            $id = $o->get_id();
+            if($id>$last_id) $last_id=$id;
+            $status = 'wc-'.$o->get_status();
+            if(!isset($groups[$status])) continue;
+            $eta = (int)$o->get_meta(self::META_ETA);
+            $arrival_ts = (int)$o->get_meta(self::META_ARRIVAL);
+            $arrival = $arrival_ts ? date_i18n('H:i', $arrival_ts) : null;
+            $bar = $status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej')));
+            $status_name = $this->status_name($status);
+            $typed    = $o->get_meta('_wcof_delivery_address');
+            $resolved = $o->get_meta('_wcof_delivery_resolved');
+            $coords   = $o->get_meta('_wcof_delivery_coords');
+            $address  = $resolved;
+            if(!$address){
+                $address = trim(implode(', ', array_filter([
+                    $o->get_shipping_address_1(), $o->get_shipping_address_2(),
+                    trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
+                ])));
+                if(!$address){
+                    $address = trim(implode(', ', array_filter([
+                        $o->get_billing_address_1(), $o->get_billing_address_2(),
+                        trim($o->get_billing_postcode().' '.$o->get_billing_city())
+                    ])));
+                }
+            }
+            $phone = $o->get_billing_phone();
+            $note  = $o->get_customer_note();
+            $payment = '';
+            if($o->get_payment_method() === 'cod'){
+                $payment = 'CASH ON DELIVERY!';
+            } elseif($o->is_paid()){
+                $payment = 'already paid online';
+            }
+            $service = $o->get_meta('_wcof_service_type');
+            $service_html = $service === 'takeaway' ? '🛍️ TAKE AWAY' : '🛵';
+            ob_start();
+            ?>
+            <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>" data-eta="<?php echo esc_attr($eta); ?>">
+              <div class="wcof-head">
+                <div class="wcof-left <?php echo $bar; ?>"></div>
+                <div class="wcof-meta">
+                  <p class="wcof-title">#<?php echo esc_html($o->get_order_number()); ?> <span class="wcof-badge"><?php echo esc_html($status_name); ?></span> <span class="wcof-service"><?php echo esc_html($service_html); ?></span></p>
+                  <p style="color:var(--wcf-muted)"><?php echo esc_html( trim($o->get_formatted_billing_full_name()) ?: $o->get_billing_email() ); ?></p>
+                </div>
+                <div class="wcof-total"><strong><?php echo wp_kses_post($o->get_formatted_order_total()); ?></strong></div>
+                <div class="wcof-arrival-wrap"><?php echo $arrival?'<span class="wcof-arrival">'.$arrival.'</span>':'—'; ?></div>
+                <div class="wcof-items" <?php echo $status==='wc-completed'?'style="display:none"':''; ?>>
+                <?php foreach($o->get_items() as $it): ?>
+                  <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
+                <?php endforeach; ?>
+                <div class="wcof-info">
+                  <?php if($typed): ?>
+                    <div>
+                      <strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?>
+                      <?php if($address): ?><div class="wcof-address-extra">(<?php echo esc_html($address); ?>)</div><?php endif; ?>
+                      <div class="wcof-map-buttons">
+                        <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($typed)); ?>">Mappa indirizzo</a>
+                        <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                      </div>
+                    </div>
+                  <?php elseif($address): ?>
+                    <div>
+                      <strong>Indirizzo mappa:</strong> <?php echo esc_html($address); ?>
+                      <div class="wcof-map-buttons">
+                        <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($address)); ?>">Mappa indirizzo</a>
+                        <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                      </div>
+                    </div>
+                  <?php endif; ?>
+                  <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?><?php if($phone): ?> <a class="btn btn-phone" target="_blank" href="tel:<?php echo esc_attr(preg_replace('/[^0-9+]/', '', $phone)); ?>">📞</a><?php endif; ?></div>
+                  <?php if($payment): ?><div><strong>Payment:</strong> <?php echo esc_html($payment); ?></div><?php endif; ?>
+                  <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
+                </div>
+                </div>
+                <div class="wcof-actions">
+                  <?php if($status===self::STATUS_AWAITING): ?>
+                    <input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
+                    <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id) ); ?>">Approva</button>
+                    <button class="btn btn-reject" data-action="reject" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id) ); ?>">Rifiuta</button>
+                  <?php elseif($status==='wc-processing'): ?>
+                    <input type="number" min="0" step="1" placeholder="ETA min" value="<?php echo esc_attr($eta); ?>" class="wcof-eta">
+                    <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_set_eta&order_id='.$id),'wcof_set_eta_'.$id) ); ?>">Aggiorna ETA</button>
+                    <a class="btn btn-out" data-action="out" data-complete-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">In Consegna</a>
+                  <?php elseif($status===self::STATUS_OUT_FOR_DELIVERY): ?>
+                    <a class="btn btn-complete" data-action="complete" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>">Complete</a>
+                  <?php elseif($status==='wc-completed'): ?>
+                    <button class="btn btn-toggle" data-action="toggle">Dettagli</button>
+                  <?php else: ?><em style="color:#94a3b8">—</em><?php endif; ?>
+                </div>
+              </div>
+            </div>
+            <?php
+            $groups[$status][] = ['id'=>$id,'eta'=>$eta,'html'=>ob_get_clean()];
+        }
+
+        foreach($groups as $st=>&$list){
+            usort($list, function($a,$b) use($st){
+                if($st === WCOF_Plugin::STATUS_AWAITING) return $b['id'] <=> $a['id'];
+                if($st === 'wc-processing'){
+                    $ea = $a['eta'] ?: 9999;
+                    $eb = $b['eta'] ?: 9999;
+                    if($ea === $eb) return $a['id'] <=> $b['id'];
+                    return $ea <=> $eb;
+                }
+                return $a['id'] <=> $b['id'];
+            });
+        }
+
         ob_start(); ?>
         <style>
           :root{ --wcf-card:#ffffff; --wcf-border:#e5e7eb; --wcf-shadow:0 6px 24px rgba(15,23,42,.06); --wcf-muted:#475569;}
-          .wcof-wrap{display:flex;flex-direction:column;gap:18px}
+          .wcof-wrap{display:grid;grid-template-columns:1fr;gap:18px}
+          .wcof-col{display:flex;flex-direction:column;gap:18px}
+          .wcof-col-full{grid-column:1/-1}
+          .wcof-section-title{margin:0 0 8px;font-weight:600}
           .wcof-card{background:var(--wcf-card);border:1px solid var(--wcf-border);border-radius:18px;box-shadow:var(--wcf-shadow);overflow:hidden}
           .wcof-head{display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px}
           .wcof-left{grid-column:1/2;width:6px;height:100%;border-radius:6px;grid-row:1/span 3}
@@ -713,6 +810,7 @@ exit;
           .st-rej  {background:linear-gradient(180deg,#fecaca,#ef4444)}
           .wcof-title{margin:0;font-weight:600}
           .wcof-badge{display:inline-block;padding:.25rem .6rem;border-radius:8px;background:#f1f5f9;border:1px solid #cbd5e1;color:#1e293b;font-size:12px;margin-left:6px;font-weight:500}
+          .wcof-service{margin-left:6px;font-size:12px;font-weight:600}
           .wcof-arrival{display:inline-block;padding:.35rem .6rem;border-radius:8px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-weight:600}
           .wcof-items{grid-column:2/6;padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
           .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end;grid-column:2/6}
@@ -746,96 +844,28 @@ exit;
           @media (max-width: 380px){
             .wcof-title{font-size:15px}
           }
+          @media (min-width:1024px){
+            .wcof-wrap{grid-template-columns:repeat(3,1fr)}
+          }
           .wcof-sound{position:fixed;right:14px;bottom:14px;background:#111;color:#fff;border-radius:24px;padding:.6rem .95rem;cursor:pointer;opacity:.9;z-index:9999;display:none}
         </style>
         <div id="wcof-order-list" class="wcof-wrap">
-        <?php foreach($orders as $o): if(!$o instanceof WC_Order){ $o=wc_get_order($o); if(!$o) continue; }
-            $id=$o->get_id(); if($id>$last_id)$last_id=$id; $status='wc-'.$o->get_status();
-            $eta=(int)$o->get_meta(self::META_ETA);
-            $arrival_ts=(int)$o->get_meta(self::META_ARRIVAL);
-            $arrival=$arrival_ts?date_i18n('H:i', $arrival_ts):null;
-            $bar=$status===self::STATUS_AWAITING?'st-await':($status==='wc-processing'?'st-proc':($status===self::STATUS_OUT_FOR_DELIVERY?'st-out':($status==='wc-completed'?'st-comp':'st-rej')));
-            $status_name = $this->status_name($status);
-            $typed    = $o->get_meta('_wcof_delivery_address');
-            $resolved = $o->get_meta('_wcof_delivery_resolved');
-            $coords   = $o->get_meta('_wcof_delivery_coords');
-            $address  = $resolved;
-            if(!$address){
-                $address = trim(implode(', ', array_filter([
-                    $o->get_shipping_address_1(), $o->get_shipping_address_2(),
-                    trim($o->get_shipping_postcode().' '.$o->get_shipping_city())
-                ])));
-                if(!$address){
-                    $address = trim(implode(', ', array_filter([
-                        $o->get_billing_address_1(), $o->get_billing_address_2(),
-                        trim($o->get_billing_postcode().' '.$o->get_billing_city())
-                    ])));
-                }
-            }
-            $phone = $o->get_billing_phone();
-            $note  = $o->get_customer_note();
-            $payment = '';
-            if($o->get_payment_method() === 'cod'){
-                $payment = 'CASH ON DELIVERY!';
-            } elseif($o->is_paid()){
-                $payment = 'already paid online';
-            }
-        ?>
-          <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>">
-            <div class="wcof-head">
-              <div class="wcof-left <?php echo $bar; ?>"></div>
-              <div class="wcof-meta">
-                <p class="wcof-title">#<?php echo esc_html($o->get_order_number()); ?> <span class="wcof-badge"><?php echo esc_html($status_name); ?></span></p>
-                <p style="color:var(--wcf-muted)"><?php echo esc_html( trim($o->get_formatted_billing_full_name()) ?: $o->get_billing_email() ); ?></p>
-              </div>
-              <div class="wcof-total"><strong><?php echo wp_kses_post($o->get_formatted_order_total()); ?></strong></div>
-              <div class="wcof-arrival-wrap"><?php echo $arrival?'<span class="wcof-arrival">'.$arrival.'</span>':'—'; ?></div>
-              <div class="wcof-items" <?php echo $status==='wc-completed'?'style="display:none"':''; ?>>
-              <?php foreach($o->get_items() as $it): ?>
-                <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
-              <?php endforeach; ?>
-              <div class="wcof-info">
-                <?php if($typed): ?>
-                  <div>
-                    <strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?>
-                    <?php if($address): ?><div class="wcof-address-extra">(<?php echo esc_html($address); ?>)</div><?php endif; ?>
-                    <div class="wcof-map-buttons">
-                      <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($typed)); ?>">Mappa indirizzo</a>
-                      <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
-                    </div>
-                  </div>
-                <?php elseif($address): ?>
-                  <div>
-                    <strong>Indirizzo mappa:</strong> <?php echo esc_html($address); ?>
-                    <div class="wcof-map-buttons">
-                      <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($address)); ?>">Mappa indirizzo</a>
-                      <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
-                    </div>
-                  </div>
-                <?php endif; ?>
-                <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?><?php if($phone): ?> <a class="btn btn-phone" target="_blank" href="tel:<?php echo esc_attr(preg_replace('/[^0-9+]/', '', $phone)); ?>">📞</a><?php endif; ?></div>
-                <?php if($payment): ?><div><strong>Payment:</strong> <?php echo esc_html($payment); ?></div><?php endif; ?>
-                <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
-              </div>
-              </div>
-              <div class="wcof-actions">
-                <?php if($status===self::STATUS_AWAITING): ?>
-                  <input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
-                  <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id) ); ?>">Approva</button>
-                  <button class="btn btn-reject" data-action="reject" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id) ); ?>">Rifiuta</button>
-                <?php elseif($status==='wc-processing'): ?>
-                  <input type="number" min="0" step="1" placeholder="ETA min" value="<?php echo esc_attr($eta); ?>" class="wcof-eta">
-                  <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_set_eta&order_id='.$id),'wcof_set_eta_'.$id) ); ?>">Aggiorna ETA</button>
-                  <a class="btn btn-out" data-action="out" data-complete-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$id),'wcof_out_for_delivery_'.$id) ); ?>">In Consegna</a>
-                <?php elseif($status===self::STATUS_OUT_FOR_DELIVERY): ?>
-                  <a class="btn btn-complete" data-action="complete" href="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_complete&order_id='.$id),'wcof_complete_'.$id) ); ?>">Complete</a>
-                <?php elseif($status==='wc-completed'): ?>
-                  <button class="btn btn-toggle" data-action="toggle">Dettagli</button>
-                <?php else: ?><em style="color:#94a3b8">—</em><?php endif; ?>
-              </div>
-            </div>
+          <div class="wcof-col" data-status="<?php echo esc_attr(self::STATUS_AWAITING); ?>">
+            <h2 class="wcof-section-title"><?php esc_html_e('Waiting for approval','wc-order-flow'); ?></h2>
+            <?php foreach($groups[self::STATUS_AWAITING] as $c){ echo $c['html']; } ?>
           </div>
-        <?php endforeach; ?>
+          <div class="wcof-col" data-status="wc-processing">
+            <h2 class="wcof-section-title"><?php esc_html_e('Preparing','wc-order-flow'); ?></h2>
+            <?php foreach($groups['wc-processing'] as $c){ echo $c['html']; } ?>
+          </div>
+          <div class="wcof-col" data-status="<?php echo esc_attr(self::STATUS_OUT_FOR_DELIVERY); ?>">
+            <h2 class="wcof-section-title"><?php esc_html_e('In delivery','wc-order-flow'); ?></h2>
+            <?php foreach($groups[self::STATUS_OUT_FOR_DELIVERY] as $c){ echo $c['html']; } ?>
+          </div>
+          <div class="wcof-col wcof-col-full" data-status="wc-completed">
+            <h2 class="wcof-section-title"><?php esc_html_e('Completed','wc-order-flow'); ?></h2>
+            <?php foreach($groups['wc-completed'] as $c){ echo $c['html']; } ?>
+          </div>
         </div>
         <button id="wcof-sound" class="wcof-sound" type="button" title="Sound">🔔 Sound</button>
         <?php

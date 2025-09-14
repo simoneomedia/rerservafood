@@ -2,6 +2,13 @@
   const root = document.getElementById('wcof-order-list');
   if(!root || !window.WCOF_ORD) return;
 
+  const cols = {
+    'wc-on-hold': root.querySelector('.wcof-col[data-status="wc-on-hold"]'),
+    'wc-processing': root.querySelector('.wcof-col[data-status="wc-processing"]'),
+    'wc-out-for-delivery': root.querySelector('.wcof-col[data-status="wc-out-for-delivery"]'),
+    'wc-completed': root.querySelector('.wcof-col[data-status="wc-completed"]')
+  };
+
   // SOUND (default on, 5 beeps)
   const soundBtn = document.getElementById('wcof-sound');
   let audioCtx = null;
@@ -62,12 +69,15 @@
     const meta = o.meta && typeof o.meta === 'object' ? Object.assign({}, o.meta) : {};
     const tip = meta._wcof_tip; if(tip!==undefined){ delete meta._wcof_tip; }
     const sched = meta._wcof_scheduled_time; if(sched!==undefined){ delete meta._wcof_scheduled_time; }
+    const serviceType = meta._wcof_service_type === 'takeaway' ? 'takeaway' : 'delivery';
+    delete meta._wcof_service_type;
+    const serviceHtml = serviceType === 'takeaway' ? '🛍️ TAKE AWAY' : '🛵';
     const metaHtml = Object.keys(meta).map(k=>`<div><strong>${htmlEscape(k)}:</strong> ${htmlEscape(meta[k])}</div>`).join('');
-    return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}">
+    return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}" data-eta="${htmlEscape(o.eta||'')}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
         <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}" style="grid-row:1 / span 3"></div>
         <div class="wcof-meta">
-          <p class="wcof-title">#${htmlEscape(o.number||o.id||'')} <span class="wcof-badge">${htmlEscape(o.status_name || statusName(o.status)||'')}</span></p>
+          <p class="wcof-title">#${htmlEscape(o.number||o.id||'')} <span class="wcof-badge">${htmlEscape(o.status_name || statusName(o.status)||'')}</span> <span class="wcof-service">${serviceHtml}</span></p>
           <p style="color:#475569">${htmlEscape(o.customer||'')}</p>
         </div>
         <div class="wcof-total"><strong>${htmlEscape(o.total||'')}</strong></div>
@@ -89,24 +99,40 @@
       </div>
     </div>`;
   }
-  function orderValue(card){
-    const st = card.getAttribute('data-status') || '';
-    const id = parseInt(card.getAttribute('data-id')||'0',10);
-    let g = 99;
-    if(st==='wc-on-hold') g=0;
-    else if(st==='wc-processing') g=1;
-    else if(st==='wc-out-for-delivery') g=2;
-    else if(st==='wc-completed') g=3;
-    return {g,id};
-  }
-  function resort(){
-    const cards = Array.from(root.querySelectorAll('.wcof-card'));
+  function sortCards(st){
+    const container = cols[st]; if(!container) return;
+    const cards = Array.from(container.querySelectorAll('.wcof-card'));
     cards.sort((a,b)=>{
-      const oa=orderValue(a), ob=orderValue(b);
-      if(oa.g!==ob.g) return oa.g-ob.g;
-      return oa.g===0 ? ob.id-oa.id : oa.id-ob.id;
+      const ia = parseInt(a.getAttribute('data-id')||'0',10);
+      const ib = parseInt(b.getAttribute('data-id')||'0',10);
+      if(st==='wc-on-hold') return ib-ia;
+      if(st==='wc-processing'){
+        const ea = parseInt(a.getAttribute('data-eta')||'9999',10);
+        const eb = parseInt(b.getAttribute('data-eta')||'9999',10);
+        if(ea===eb) return ia-ib;
+        return ea-eb;
+      }
+      return ia-ib;
     });
-    cards.forEach(c=>root.appendChild(c));
+    cards.forEach(c=>container.appendChild(c));
+  }
+  function resortAll(){
+    sortCards('wc-on-hold');
+    sortCards('wc-processing');
+    sortCards('wc-out-for-delivery');
+    sortCards('wc-completed');
+  }
+  function appendCardToColumn(el){
+    const st = el.getAttribute('data-status');
+    const container = cols[st] || root;
+    container.appendChild(el);
+    sortCards(st);
+  }
+  function moveCard(card, st){
+    const old = card.getAttribute('data-status');
+    card.setAttribute('data-status', st);
+    appendCardToColumn(card);
+    if(old && old!==st) sortCards(old);
   }
   function safePrependCard(o){
     try{
@@ -115,11 +141,12 @@
       const el = tmp.firstElementChild; if(!el) return;
       const id = el.getAttribute('data-id');
       if(id && root.querySelector(`.wcof-card[data-id="${CSS.escape(id)}"]`)) return;
-      root.appendChild(el);
-      resort();
+      appendCardToColumn(el);
       setTimeout(()=>el.classList.remove('wcof-new'), 5000);
     }catch(e){ console.warn('WCOF render error', e); }
   }
+
+  resortAll();
 
   let lastId = parseInt(WCOF_ORD.last_id || 0, 10);
   function schedule(next){ setTimeout(poll, next||3500); }
@@ -155,21 +182,20 @@
       if(!confirm('Segnare come "In consegna"?')) return;
       const url = (t.getAttribute('href')||'').replace(/&amp;/g,'&');
       fetch(url, {credentials:'include'}).then(()=>{
-        const card = t.closest('.wcof-card');
-        if(card){
-          card.setAttribute('data-status','wc-out-for-delivery');
-          const left = card.querySelector('.wcof-left');
-          if(left){ left.classList.remove('st-proc'); left.classList.add('st-out'); }
-          const badge = card.querySelector('.wcof-badge');
-          if(badge) badge.textContent = statusName('wc-out-for-delivery');
-          t.textContent = 'Complete';
-          t.classList.remove('btn-out');
-          t.classList.add('btn-complete');
-          t.dataset.action = 'complete';
-          const cu = t.dataset.completeUrl || '';
-          t.setAttribute('href', cu.replace(/&amp;/g,'&'));
-          resort();
-        }
+          const card = t.closest('.wcof-card');
+          if(card){
+            const left = card.querySelector('.wcof-left');
+            if(left){ left.classList.remove('st-proc'); left.classList.add('st-out'); }
+            const badge = card.querySelector('.wcof-badge');
+            if(badge) badge.textContent = statusName('wc-out-for-delivery');
+            t.textContent = 'Complete';
+            t.classList.remove('btn-out');
+            t.classList.add('btn-complete');
+            t.dataset.action = 'complete';
+            const cu = t.dataset.completeUrl || '';
+            t.setAttribute('href', cu.replace(/&amp;/g,'&'));
+            moveCard(card, 'wc-out-for-delivery');
+          }
       }).catch(()=>{ window.location.href = url; });
     }
     if(t.dataset && t.dataset.action==='complete'){
@@ -179,7 +205,6 @@
       fetch(url, {credentials:'include'}).then(()=>{
         const card = t.closest('.wcof-card');
         if(card){
-          card.setAttribute('data-status','wc-completed');
           const left = card.querySelector('.wcof-left');
           if(left){ left.classList.remove('st-out'); left.classList.add('st-comp'); }
           const badge = card.querySelector('.wcof-badge');
@@ -191,7 +216,7 @@
           t.classList.add('btn-toggle');
           t.dataset.action = 'toggle';
           t.removeAttribute('href');
-          resort();
+          moveCard(card, 'wc-completed');
         }
       }).catch(()=>{ window.location.href = url; });
     }
