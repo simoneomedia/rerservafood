@@ -1,0 +1,113 @@
+/* Admin panel styling with modern design system */
+
+/* Typography and spacing scale */
+:root {
+  --font-base: 'Inter', Arial, sans-serif;
+  --text-color: #333;
+
+  --space-1: 0.25rem; /* 4px */
+  --space-2: 0.5rem;  /* 8px */
+  --space-3: 1rem;    /* 16px */
+  --space-4: 1.5rem;  /* 24px */
+  --space-5: 2rem;    /* 32px */
+
+  --accent-color: #1e90ff;
+  --accent-hover: #1877c9;
+  --transition: all 0.2s ease-in-out;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+body {
+  font-family: var(--font-base);
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
+/* Cards */
+.card {
+  background: #fff;
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  border: 1px solid #e5e5e5;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+.card:hover,
+.card:focus-within {
+  box-shadow: var(--shadow-md);
+}
+
+/* Buttons */
+.button,
+button,
+input[type="submit"] {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-color);
+  background: var(--accent-color);
+  color: #fff;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.button:hover,
+.button:focus,
+button:hover,
+button:focus,
+input[type="submit"]:hover,
+input[type="submit"]:focus {
+  background: var(--accent-hover);
+}
+
+/* Forms */
+form input,
+form select,
+form textarea {
+  padding: var(--space-2);
+  border: 1px solid #ccc;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+form input:focus,
+form select:focus,
+form textarea:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(30, 144, 255, 0.2);
+}
+
+/* Utility classes */
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.accent-bg { background: var(--accent-color); color: #fff; }
+.accent-text { color: var(--accent-color); }
+
+/* Responsive breakpoints */
+@media (max-width: 1024px) {
+  .card { padding: var(--space-2); }
+  .button,
+  button,
+  input[type="submit"] { padding: var(--space-2) var(--space-3); }
+}
+
+@media (max-width: 768px) {
+  .card { margin-bottom: var(--space-3); }
+  form { padding: 0 var(--space-2); }
+}
+
+@media (max-width: 480px) {
+  .card { padding: var(--space-2); }
+  .button,
+  button,
+  input[type="submit"] { width: 100%; }
+  form input,
+  form select,
+  form textarea { width: 100%; }
+}
+
