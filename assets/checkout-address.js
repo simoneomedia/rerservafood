@@ -57,6 +57,9 @@
         var validInput = get('wcof_delivery_valid');
         var summaryEl = document.getElementById('wcof-resolved-display');
         var addressSelect = document.getElementById('wcof-address-select');
+        var serviceInput = get('wcof_service_type');
+        var deliveryFields = document.getElementById('wcof-delivery-details');
+        var toggleBtns = document.querySelectorAll('#wcof-service-toggle .wcof-mode-btn');
         if(!mapEl) return;
         var map = Leaflet.map(mapEl);
         Leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -358,6 +361,32 @@
             }
         }
 
+        toggleBtns.forEach(function(btn){
+            btn.addEventListener('click', function(){
+                updateMode(btn.getAttribute('data-mode'));
+            });
+        });
+        function updateMode(mode){
+            if(serviceInput) serviceInput.value = mode;
+            toggleBtns.forEach(function(b){
+                if(b.getAttribute('data-mode') === mode){ b.classList.add('selected'); }
+                else{ b.classList.remove('selected'); }
+            });
+            if(mode === 'takeaway'){
+                if(deliveryFields) deliveryFields.style.display = 'none';
+                if(townInput) townInput.required = false;
+                if(addrInput) addrInput.required = false;
+                if(validInput) validInput.value = '1';
+                toggleQuickPayButtons(true);
+            }else{
+                if(deliveryFields) deliveryFields.style.display = '';
+                if(townInput) townInput.required = true;
+                if(addrInput) addrInput.required = true;
+                if(validInput && (!coordInput || !coordInput.value)) validInput.value = '';
+                toggleQuickPayButtons(validInput && validInput.value==='1');
+            }
+        }
+        updateMode(serviceInput ? serviceInput.value : 'delivery');
         if(coordInput && coordInput.value){
             var parts = coordInput.value.split(',');
             if(parts.length === 2){
