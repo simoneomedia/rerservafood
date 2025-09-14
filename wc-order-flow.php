@@ -1202,15 +1202,21 @@ exit;
         }
 
         echo '<div id="wcof-checkout-address">';
+        echo '<div id="wcof-service-toggle" class="wcof-toggle">';
+        echo '<button type="button" class="wcof-mode-btn selected" data-mode="delivery">🛵 '.esc_html__('Delivery','wc-order-flow').'</button>';
+        echo '<button type="button" class="wcof-mode-btn" data-mode="takeaway">🛍️ '.esc_html__('Take away','wc-order-flow').'</button>';
+        echo '</div>';
+        echo '<input type="hidden" id="wcof_service_type" name="wcof_service_type" value="delivery" />';
+        echo '<div id="wcof-delivery-details">';
         woocommerce_form_field('wcof_delivery_town', [
             'type'     => 'text',
-            'class'    => [ 'form-row-first' ],
+            'class'    => [ 'form-row-wide' ],
             'required' => true,
             'label'    => __('Town','wc-order-flow'),
         ], $town_value);
         woocommerce_form_field('wcof_delivery_address', [
             'type'     => 'text',
-            'class'    => [ 'form-row-last' ],
+            'class'    => [ 'form-row-wide' ],
             'required' => true,
             'label'    => __('Address','wc-order-flow'),
         ], $addr_value);
@@ -1222,17 +1228,11 @@ exit;
         ], $door_value);
         woocommerce_form_field('wcof_tip', [
             'type'     => 'number',
-            'class'    => [ 'form-row-first' ],
+            'class'    => [ 'form-row-wide' ],
             'required' => false,
             'label'    => __('Tip amount','wc-order-flow'),
             'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
         ], $tip_value);
-        woocommerce_form_field('wcof_scheduled_time', [
-            'type'     => 'time',
-            'class'    => [ 'form-row-last' ],
-            'required' => false,
-            'label'    => __('Desired delivery time','wc-order-flow'),
-        ], $time_value);
         // Error message container shown when the typed address is
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
@@ -1265,12 +1265,19 @@ exit;
         // Allow users to correct the marker position manually.
         echo '<p class="wcof-move-marker"><a href="#" id="wcof-move-marker">'.esc_html__('Marker is wrong / let me set the marker','wc-order-flow').'</a></p>';
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
+        echo '</div>'; // end wcof-delivery-details
+        woocommerce_form_field('wcof_scheduled_time', [
+            'type'     => 'time',
+            'class'    => [ 'form-row-wide' ],
+            'required' => false,
+            'label'    => __('Desired delivery time','wc-order-flow'),
+        ], $time_value);
         echo '</div>';
     }
 
     public function hide_billing_fields($fields){
-        // Hide unused address fields but keep postcode and phone visible
-        $base = ['first_name','last_name','company','address_1','address_2','city','state','country','phone'];
+        // Hide unused address fields including postcode but keep phone visible
+        $base = ['first_name','last_name','company','address_1','address_2','city','state','country','postcode','phone'];
         foreach(['billing','shipping'] as $section){
             foreach($base as $part){
                 $key = $section . '_' . $part;
@@ -1294,6 +1301,8 @@ exit;
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
     }
     public function validate_checkout_address(){
+        $service = isset($_POST['wcof_service_type']) ? sanitize_text_field($_POST['wcof_service_type']) : 'delivery';
+        if($service === 'takeaway') return;
         $s = $this->settings();
         $codes = $this->delivery_postal_codes();
         $postcode = isset($_POST['billing_postcode']) ? sanitize_text_field($_POST['billing_postcode']) : '';
@@ -1333,11 +1342,20 @@ exit;
     public function save_delivery_address($order_id){
         $order = wc_get_order($order_id);
         if(!$order) return;
+        $service = isset($_POST['wcof_service_type']) ? sanitize_text_field($_POST['wcof_service_type']) : 'delivery';
+        $order->update_meta_data('_wcof_service_type', $service);
         $town = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
         $addr = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
         $door = isset($_POST['wcof_delivery_door']) ? sanitize_text_field($_POST['wcof_delivery_door']) : '';
         $tip  = isset($_POST['wcof_tip']) ? floatval($_POST['wcof_tip']) : '';
         $time = isset($_POST['wcof_scheduled_time']) ? sanitize_text_field($_POST['wcof_scheduled_time']) : '';
+        if($service === 'takeaway'){
+            if($time !== ''){
+                $order->update_meta_data('_wcof_scheduled_time', $time);
+            }
+            $order->save();
+            return;
+        }
         if($town !== ''){
             $order->update_meta_data('_wcof_delivery_town', $town);
         }

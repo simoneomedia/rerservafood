@@ -47,3 +47,32 @@
   box-shadow: 0 0 0 3px rgba(79,70,229,0.15);
 }
 
+/* Stack form fields in a single column */
+.woocommerce-checkout .form-row-first,
+.woocommerce-checkout .form-row-last {
+  float: none;
+  width: 100%;
+}
+
+/* Hide postcode field */
+#billing_postcode_field { display: none; }
+
+/* Delivery/Takeaway toggle */
+#wcof-service-toggle {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+#wcof-service-toggle .wcof-mode-btn {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+#wcof-service-toggle .wcof-mode-btn.selected {
+  border-color: #4f46e5;
+  background: #eef;
+}
+
