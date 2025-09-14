@@ -133,12 +133,11 @@ final class WCOF_Plugin {
         add_action('woocommerce_order_status_processing',           [$this,'push_approved'], 20);
         add_action('woocommerce_order_status_out-for-delivery',     [$this,'push_out_for_delivery'], 20);
 
-        // Service worker + manifest at root via rewrites
+        // Service worker at root via rewrites
         add_action('init', [$this,'register_sw_rewrite']);
         add_filter('query_vars', [$this,'add_query_vars']);
         add_action('template_redirect', [$this,'maybe_serve_sw']);
         add_filter('redirect_canonical', [$this,'prevent_sw_canonical'], 10, 2);
-        add_action('wp_head', [$this,'maybe_output_manifest']);
 
         // Push shortcodes (button + debug)
         add_shortcode('wcof_push_button', [$this,'shortcode_push_button']);
@@ -151,15 +150,13 @@ final class WCOF_Plugin {
 
     }
 
-/* ===== Service workers & manifest via rewrite to site root ===== */
+/* ===== Service worker via rewrite to site root ===== */
 public function register_sw_rewrite(){
 add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?wcof_sw=worker', 'top');
 add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
-add_rewrite_rule('^wcof-manifest\.json$', 'index.php?wcof_manifest=1', 'top');
 }
 public function add_query_vars($vars){
 $vars[]='wcof_sw';
-$vars[]='wcof_manifest';
 return $vars;
 }
 public function maybe_serve_sw(){
@@ -174,52 +171,6 @@ header('X-Robots-Tag: noindex');
 echo "importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');\n";
 exit;
 }
-if(get_query_var('wcof_manifest')){
-$s = $this->settings();
-$name  = $s['pwa_name'] ? $s['pwa_name'] : get_bloginfo('name');
-$color = $s['pwa_color'] ? $s['pwa_color'] : '#ffffff';
-$manifest = [
-'name' => $name,
-'short_name' => $name,
-'start_url' => home_url('/'),
-'display' => 'standalone',
-'background_color' => $color,
-'theme_color' => $color,
-];
-if(!empty($s['pwa_icon'])){
-$manifest['icons'] = [[
-'src'   => $s['pwa_icon'],
-'sizes' => '192x192',
-'type'  => 'image/png',
-]];
-}
-http_response_code(200);
-header('Content-Type: application/manifest+json; charset=utf-8');
-header('Cache-Control: public, max-age=3600');
-header('X-Content-Type-Options: nosniff');
-header('X-Robots-Tag: noindex');
-echo wp_json_encode($manifest);
-exit;
-}
-}
-public function maybe_output_manifest(){
-$s = $this->settings();
-if(empty($s['pwa_enable'])) return;
-echo '<link rel="manifest" href="'.esc_url(home_url('/wcof-manifest.json')).'" />' . "\n";
-if(!empty($s['pwa_color'])){
-echo '<meta name="theme-color" content="'.esc_attr($s['pwa_color']).'" />' . "\n";
-}
-if(!empty($s['pwa_icon'])){
-echo '<link rel="apple-touch-icon" href="'.esc_url($s['pwa_icon']).'" />' . "\n";
-}
-if(!empty($s['pwa_prompt'])){
-        wp_enqueue_script('wcof-pwa-install', plugins_url('assets/pwa-install-prompt.js', __FILE__), [], '1.0', true);
-        wp_localize_script('wcof-pwa-install', 'wcofPwaPrompt', [
-        'text'=> $s['pwa_prompt_text']? $s['pwa_prompt_text']:esc_html__('Download the app','wc-order-flow'),
-        'manual'=> esc_html__('Add this page to your home screen via your browser menu','wc-order-flow')
-        ]);
-        echo '<link rel="stylesheet" href="'.esc_url(plugins_url('assets/pwa-install-prompt.css', __FILE__)).'" />' . "\n";
-        }
 }
 
     /* Avoid any 301/302 on SW files — redirects break registration */
@@ -1054,13 +1005,7 @@ if(!empty($s['pwa_prompt'])){
             'postal_codes'=>isset($v['postal_codes'])?sanitize_text_field($v['postal_codes']):'',
             'delivery_radius'=>isset($v['delivery_radius'])?floatval($v['delivery_radius']):0,
             'delivery_polygon'=>isset($v['delivery_polygon'])?wp_kses_post($v['delivery_polygon']):'',
-            'language'=>isset($v['language'])?sanitize_text_field($v['language']):'auto',
-            'pwa_enable'=>!empty($v['pwa_enable'])?1:0,
-            'pwa_name'=>isset($v['pwa_name'])?sanitize_text_field($v['pwa_name']):'',
-            'pwa_icon'=>isset($v['pwa_icon'])?esc_url_raw($v['pwa_icon']):'',
-            'pwa_color'=>isset($v['pwa_color'])?sanitize_hex_color($v['pwa_color']):'',
-            'pwa_prompt'=>!empty($v['pwa_prompt'])?1:0,
-            'pwa_prompt_text'=>isset($v['pwa_prompt_text'])?sanitize_text_field($v['pwa_prompt_text']):''
+            'language'=>isset($v['language'])?sanitize_text_field($v['language']):'auto'
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
@@ -1075,8 +1020,7 @@ if(!empty($s['pwa_prompt'])){
             'enable'=>0,'app_id'=>'','rest_key'=>'','license_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
-            'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto',
-            'pwa_enable'=>0,'pwa_name'=>'','pwa_icon'=>'','pwa_color'=>'#ffffff','pwa_prompt'=>1,'pwa_prompt_text'=>''
+            'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto'
         ]);
     }
 
@@ -1547,15 +1491,6 @@ if(!empty($s['pwa_prompt'])){
               <tr><th scope="row"><?php esc_html_e('Opening time', 'wc-order-flow'); ?></th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
               <tr><th scope="row"><?php esc_html_e('Store closed', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
             <tr><th scope="row"><?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
-            </table>
-            <h2><?php esc_html_e('App', 'wc-order-flow'); ?></h2>
-            <table class="form-table" role="presentation">
-              <tr><th scope="row"><?php esc_html_e('Enable app features', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_enable]" value="1" <?php checked($s['pwa_enable'],1); ?>/> <?php esc_html_e('On', 'wc-order-flow'); ?></label></td></tr>
-              <tr><th scope="row"><?php esc_html_e('App name', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_name]" value="<?php echo esc_attr($s['pwa_name']); ?>" placeholder="<?php echo esc_attr(get_bloginfo('name')); ?>"/></td></tr>
-              <tr><th scope="row"><?php esc_html_e('App icon URL', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_icon]" value="<?php echo esc_attr($s['pwa_icon']); ?>" placeholder="https://example.com/icon.png"/></td></tr>
-              <tr><th scope="row"><?php esc_html_e('Theme color', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_color]" value="<?php echo esc_attr($s['pwa_color']); ?>" placeholder="#ffffff"/></td></tr>
-              <tr><th scope="row"><?php esc_html_e('Show install prompt', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_prompt]" value="1" <?php checked($s['pwa_prompt'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
-              <tr><th scope="row"><?php esc_html_e('Install prompt text', 'wc-order-flow'); ?></th><td><input type="text" class="regular-text" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_prompt_text]" value="<?php echo esc_attr($s['pwa_prompt_text']); ?>" placeholder="<?php esc_attr_e('Download the app', 'wc-order-flow'); ?>"/></td></tr>
             </table>
             <h2><?php esc_html_e('OneSignal', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
