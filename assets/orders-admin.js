@@ -43,7 +43,8 @@
   }
   function actionButtons(o){
     if(o.status==='wc-on-hold'){
-      return `<input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
+      const defEta = parseInt(o.eta,10) || WCOF_ORD.wait_min || '';
+      return `<input type="number" min="0" step="1" placeholder="ETA min" value="${htmlEscape(defEta)}" class="wcof-eta">
               <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.approve_url||'')}">Approva</button>
               <button class="btn btn-reject" data-action="reject" data-url="${htmlEscape(o.reject_url||'')}">Rifiuta</button>`;
     } else if(o.status==='wc-processing'){
@@ -72,7 +73,8 @@
     const sched = meta._wcof_scheduled_time;
     const serviceType = meta._wcof_service_type === 'takeaway' ? 'takeaway' : 'delivery';
     const serviceHtml = serviceType === 'takeaway' ? '🛍️ TAKE AWAY' : '🛵';
-    return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}" data-eta="${htmlEscape(o.eta||'')}">
+    const etaVal = parseInt(o.eta,10) || (o.status==='wc-on-hold' ? WCOF_ORD.wait_min || '' : '');
+    return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}" data-eta="${htmlEscape(etaVal)}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
         <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}" style="grid-row:1 / span 3"></div>
         <div class="wcof-meta">
