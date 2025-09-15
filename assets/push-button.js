@@ -31,18 +31,31 @@
         OneSignal.isPushNotificationsEnabled(function(enabled){
           if(enabled){
             OneSignal.setSubscription(false);
-            setTimeout(refresh, 800);
           } else {
             if(window.WCOF_PUSH && WCOF_PUSH.userId){
               OneSignal.setExternalUserId(String(WCOF_PUSH.userId));
             }
-            OneSignal.showSlidedownPrompt();
-            setTimeout(refresh, 1200);
+            if(Notification.permission === 'granted'){
+              if(typeof OneSignal.registerForPushNotifications === 'function'){
+                OneSignal.registerForPushNotifications();
+              } else {
+                OneSignal.setSubscription(true);
+              }
+            } else {
+              OneSignal.showSlidedownPrompt();
+            }
           }
         });
       });
     });
   }
 
-  setTimeout(refresh, 800);
+  (function waitForOneSignal(){
+    if(!window.OneSignal){ setTimeout(waitForOneSignal, 400); return; }
+    OneSignal.push(function(){
+      OneSignal.on('subscriptionChange', refresh);
+    });
+  })();
+
+  refresh();
 })();
