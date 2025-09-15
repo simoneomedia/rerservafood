@@ -1157,8 +1157,13 @@ exit;
                 wc_print_notice(__('The user does not have orders','wc-order-flow'), 'notice');
             }else{
                 $order_ids = [];
+                $has_delivery_order = false;
+                $last_delivery_order = null;
                 foreach($orders as $o){
                     if( !$o instanceof WC_Order ) continue;
+                    if( $o->get_meta('_wcof_service_type') === 'takeaway' ) continue;
+                    if( !$has_delivery_order ) $last_delivery_order = $o;
+                    $has_delivery_order = true;
                     $order_ids[] = '#' . $o->get_id();
                     $town     = $o->get_meta('_wcof_delivery_town');
                     $full     = $o->get_meta('_wcof_delivery_address');
@@ -1202,8 +1207,8 @@ exit;
                     }
                 }
                 $prev_addresses = array_values($prev_addresses);
-                if(empty($prev_addresses)){
-                    $last_order = $orders[0];
+                if(empty($prev_addresses) && $has_delivery_order){
+                    $last_order = $last_delivery_order;
                     $last_town     = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_town') : '';
                     $last_addr     = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_address') : '';
                     $last_resolved = $last_order instanceof WC_Order ? $last_order->get_meta('_wcof_delivery_resolved') : '';
@@ -1389,6 +1394,12 @@ exit;
         if($service === 'takeaway'){
             if($time !== ''){
                 $order->update_meta_data('_wcof_scheduled_time', $time);
+            }
+            // Store the shop address on takeaway orders
+            $s = $this->settings();
+            if( !empty($s['address']) ){
+                $order->update_meta_data('_wcof_delivery_address', $s['address']);
+                $order->update_meta_data('_wcof_delivery_resolved', $s['address']);
             }
             $order->save();
             return;
