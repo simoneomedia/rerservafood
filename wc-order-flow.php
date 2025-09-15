@@ -1051,6 +1051,16 @@ exit;
             'wait_min'=>isset($v['wait_min'])?absint($v['wait_min']):0,
             'wait_max'=>isset($v['wait_max'])?absint($v['wait_max']):0
         ];
+
+        // If push notifications are being enabled for the first time, ensure
+        // the service worker rewrite rules are registered and flushed so the
+        // worker files are immediately available at the site root.
+        $prev = get_option(self::OPTION_KEY, []);
+        $was_enabled = !empty($prev['enable']);
+        if (!$was_enabled && !empty($out['enable'])) {
+            $this->register_sw_rewrite();
+            flush_rewrite_rules();
+        }
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
         if(!empty($v['open_days']) && is_array($v['open_days'])){
