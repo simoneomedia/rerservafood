@@ -190,7 +190,7 @@
             const badge = card.querySelector('.wcof-badge');
             if(badge) badge.textContent = statusName('wc-out-for-delivery');
             const items = card.querySelector('.wcof-items');
-            if(items) items.style.display = 'none';
+            if(items) items.style.display = 'block';
             const etaIn = card.querySelector('.wcof-eta');
             const btnAp = card.querySelector('.btn-approve');
             if(etaIn) etaIn.remove();
