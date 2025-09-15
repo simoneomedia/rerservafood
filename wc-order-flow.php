@@ -796,7 +796,7 @@ exit;
         ob_start(); ?>
         <style>
           :root{ --wcf-card:#ffffff; --wcf-border:#e5e7eb; --wcf-shadow:0 6px 24px rgba(15,23,42,.06); --wcf-muted:#475569;}
-          #wcof-order-list{width:100vw;margin-left:calc(50% - 50vw)}
+          #wcof-order-list{width:100vw;max-width:none;margin-left:calc(50% - 50vw)}
           .wcof-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%}
           .wcof-col{display:flex;flex-direction:column;gap:18px}
           .wcof-col-full{grid-column:1/-1}
