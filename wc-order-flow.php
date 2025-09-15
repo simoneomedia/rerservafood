@@ -2062,11 +2062,27 @@ exit;
         if( !$this->is_license_valid() ) return '';
         if( empty($this->settings()['enable']) ) return '';
         wp_enqueue_script('wcof-push-btn', plugins_url('assets/push-button.js', __FILE__), [], '1.9.0', true);
+        $labels = [
+            'enable' => __('🔔 Enable notifications', 'wc-order-flow'),
+            'enable_admin' => __('🔔 Enable admin notifications', 'wc-order-flow'),
+            'disable' => __('🔕 Disable notifications', 'wc-order-flow'),
+            'disable_admin' => __('🔕 Disable admin notifications', 'wc-order-flow'),
+            'status_subscribed' => __('Subscribed', 'wc-order-flow'),
+            'status_not_subscribed' => __('Not subscribed', 'wc-order-flow'),
+            'status_admin_subscribed' => __('Admin subscribed', 'wc-order-flow'),
+            'status_admin_not_subscribed' => __('Admin not subscribed', 'wc-order-flow'),
+        ];
+        wp_localize_script('wcof-push-btn', 'WCOF_PUSH_BTN', [
+            'labels' => $labels,
+        ]);
+        $is_admin = current_user_can('manage_woocommerce');
+        $button_label = $is_admin ? $labels['enable_admin'] : $labels['enable'];
+        $status_label = $is_admin ? $labels['status_admin_not_subscribed'] : $labels['status_not_subscribed'];
         ob_start(); ?>
         <style>.wcof-push-wrap{display:flex;align-items:center;gap:10px;margin:8px 0}.wcof-push-btn{background:#111;color:#fff;border:none;border-radius:999px;padding:.6rem 1rem;font-weight:700;cursor:pointer}.wcof-push-status{font-size:.9rem;color:#475569}</style>
         <div class="wcof-push-wrap">
-          <button id="wcof-push-btn" class="wcof-push-btn">🔔 Enable notifications</button>
-          <span id="wcof-push-status" class="wcof-push-status">Not subscribed</span>
+          <button id="wcof-push-btn" class="wcof-push-btn"><?php echo esc_html($button_label); ?></button>
+          <span id="wcof-push-status" class="wcof-push-status"><?php echo esc_html($status_label); ?></span>
         </div>
         <?php return ob_get_clean();
     }
