@@ -307,6 +307,7 @@ exit;
     }
     public function render_metabox($post){
         $o = wc_get_order($post->ID); if(!$o) return;
+        $s = $this->settings();
         $eta = (int)$o->get_meta(self::META_ETA);
         $status = 'wc-'.$o->get_status();
         $approve = wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$post->ID),'wcof_approve_'.$post->ID);
@@ -315,7 +316,7 @@ exit;
         $outurl  = wp_nonce_url(admin_url('admin-post.php?action=wcof_out_for_delivery&order_id='.$post->ID), 'wcof_out_for_delivery_'.$post->ID);
         ?>
         <p><label for="wcof_eta"><strong><?php echo esc_html__('Waiting time (minutes)', 'wc-order-flow'); ?></strong></label></p>
-        <p><input type="number" min="0" step="1" id="wcof_eta" value="<?php echo esc_attr($eta?:15); ?>" style="width:100%"></p>
+        <p><input type="number" min="0" step="1" id="wcof_eta" value="<?php echo esc_attr($eta ?: $s['wait_min']); ?>" style="width:100%"></p>
         <?php if($status===self::STATUS_AWAITING): ?>
         <p>
           <a class="button button-primary" href="<?php echo esc_url($approve); ?>" onclick="event.preventDefault();wcofSubmit(this);"><?php esc_html_e('Approve', 'wc-order-flow'); ?></a>
@@ -668,10 +669,10 @@ exit;
     public function shortcode_orders_admin($atts=[]){
         if(!(current_user_can('manage_woocommerce') || current_user_can('wcof_rider')))
             return '<div class="wcof-alert">'.esc_html__('Only administrators or riders can view this page.', 'wc-order-flow').'</div>';
+        $s = $this->settings();
         $args=['limit'=>50,'orderby'=>'date','order'=>'DESC','type'=>'shop_order','return'=>'objects'];
         if(!current_user_can('manage_woocommerce')){
-            $set=$this->settings();
-            $args['status']=!empty($set['rider_see_processing'])
+            $args['status']=!empty($s['rider_see_processing'])
                 ? ['processing','out-for-delivery','completed']
                 : ['out-for-delivery','completed'];
         }
@@ -722,7 +723,7 @@ exit;
             $service_html = $service === 'takeaway' ? '🛍️ TAKE AWAY' : '🛵';
             ob_start();
             ?>
-            <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>" data-eta="<?php echo esc_attr($eta); ?>">
+            <div class="wcof-card" data-id="<?php echo esc_attr($id); ?>" data-status="<?php echo esc_attr($status); ?>" data-eta="<?php echo esc_attr($eta ?: $s['wait_min']); ?>">
               <div class="wcof-head">
                 <div class="wcof-left <?php echo $bar; ?>"></div>
                 <div class="wcof-meta">
@@ -761,7 +762,7 @@ exit;
                 </div>
                 <div class="wcof-actions">
                   <?php if($status===self::STATUS_AWAITING): ?>
-                    <input type="number" min="0" step="1" placeholder="ETA min" class="wcof-eta">
+                    <input type="number" min="0" step="1" placeholder="ETA min" value="<?php echo esc_attr($eta ?: $s['wait_min']); ?>" class="wcof-eta">
                     <button class="btn btn-approve" data-action="approve" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_approve&order_id='.$id),'wcof_approve_'.$id) ); ?>">Approva</button>
                     <button class="btn btn-reject" data-action="reject" data-url="<?php echo esc_attr( wp_nonce_url(admin_url('admin-post.php?action=wcof_reject&order_id='.$id),'wcof_reject_'.$id) ); ?>">Rifiuta</button>
                   <?php elseif($status==='wc-processing'): ?>
@@ -880,7 +881,8 @@ exit;
         wp_localize_script('wcof-orders','WCOF_ORD',[
             'rest'=>esc_url_raw(rest_url('wcof/v1')),
             'nonce'=>wp_create_nonce('wp_rest'),
-            'last_id'=>$last_id
+            'last_id'=>$last_id,
+            'wait_min'=>$s['wait_min']
         ]);
         return ob_get_clean();
     }

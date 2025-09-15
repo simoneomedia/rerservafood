@@ -200,11 +200,21 @@
                     var full = data.display_name || '';
                     if(resolvedInput) resolvedInput.value = full;
                     if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
+                    var typedAddr = addrInput.value.trim();
+                    if(doorInput && doorInput.value.trim()){
+                        var doorVal = doorInput.value.trim();
+                        if(typedAddr.indexOf(doorVal) === -1){ typedAddr += (typedAddr?' ':'') + doorVal; }
+                    }
+                    var townVal = townInput.value.trim();
                     document.querySelector('#billing_postcode').value = pc;
-                    document.querySelector('#billing_address_1').value = full;
-                    document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
+                    document.querySelector('#billing_address_1').value = typedAddr;
+                    document.querySelector('#billing_city').value = townVal || addr.city || addr.town || addr.village || '';
                     document.querySelector('#billing_country').value = (addr.country_code || '').toUpperCase();
                     document.querySelector('#billing_state').value = '';
+                    document.querySelector('#shipping_postcode').value = pc;
+                    document.querySelector('#shipping_address_1').value = typedAddr;
+                    document.querySelector('#shipping_city').value = townVal || addr.city || addr.town || addr.village || '';
+                    document.querySelector('#shipping_country').value = (addr.country_code || '').toUpperCase();
                     document.querySelector('#shipping_state').value = '';
                     lastValid = latlng;
                     if(validInput) validInput.value='1';
