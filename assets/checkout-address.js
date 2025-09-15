@@ -118,6 +118,7 @@
             fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(store))
                 .then(function(r){ return r.json(); })
                 .then(function(d){
+                    if(marker) return; // don't override existing marker view
                     if(Array.isArray(d) && d[0]){
                         var item = d[0];
                         if(item.boundingbox){
@@ -133,6 +134,7 @@
             fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode='+encodeURIComponent(allowed[0]))
                 .then(function(r){ return r.json(); })
                 .then(function(d){
+                    if(marker) return; // don't override existing marker view
                     if(Array.isArray(d) && d[0]){
                         var item = d[0];
                         if(item.boundingbox){

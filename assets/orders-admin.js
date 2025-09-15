@@ -69,11 +69,9 @@
     const note = htmlEscape(o.note||'');
     const payment = htmlEscape(o.payment||'');
     const meta = o.meta && typeof o.meta === 'object' ? Object.assign({}, o.meta) : {};
-    const sched = meta._wcof_scheduled_time; if(sched!==undefined){ delete meta._wcof_scheduled_time; }
+    const sched = meta._wcof_scheduled_time;
     const serviceType = meta._wcof_service_type === 'takeaway' ? 'takeaway' : 'delivery';
-    delete meta._wcof_service_type;
     const serviceHtml = serviceType === 'takeaway' ? '🛍️ TAKE AWAY' : '🛵';
-    const metaHtml = Object.keys(meta).map(k=>`<div><strong>${htmlEscape(k)}:</strong> ${htmlEscape(meta[k])}</div>`).join('');
     return `<div class="wcof-card wcof-new" data-id="${htmlEscape(o.id||'')}" data-status="${htmlEscape(o.status||'')}" data-eta="${htmlEscape(o.eta||'')}">
       <div class="wcof-head" style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px">
         <div class="wcof-left ${statusBar(o.status||'wc-on-hold')}" style="grid-row:1 / span 3"></div>
@@ -94,7 +92,6 @@
             ${payment?`<div><strong>Payment:</strong> ${payment}</div>`:''}
             ${sched?`<div><strong>Scheduled time:</strong> ${htmlEscape(sched)}</div>`:''}
             <div><strong>Note:</strong> ${note || '—'}</div>
-            ${metaHtml}
           </div>
         </div>
         <div class="wcof-actions" style="grid-column:2 / 6">${actionButtons(o)}</div>
