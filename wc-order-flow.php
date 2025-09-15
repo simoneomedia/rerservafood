@@ -736,24 +736,24 @@ exit;
                   <div class="wcof-item"><span><?php echo esc_html($it->get_name()); ?></span> <strong>× <?php echo (int)$it->get_quantity(); ?></strong></div>
                 <?php endforeach; ?>
                 <div class="wcof-info">
-                  <?php if($typed): ?>
-                    <div>
-                      <strong>Indirizzo digitato:</strong> <?php echo esc_html($typed); ?>
-                      <?php if($address): ?><div class="wcof-address-extra">(<?php echo esc_html($address); ?>)</div><?php endif; ?>
-                      <div class="wcof-map-buttons">
-                        <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($typed)); ?>">Mappa indirizzo</a>
-                        <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                    <?php if($typed): ?>
+                      <div>
+                        <strong>Indirizzo digitato:</strong> <span class="wcof-address-text"><?php echo esc_html($typed); ?></span>
+                        <?php if($address): ?><div class="wcof-address-extra">(<?php echo esc_html($address); ?>)</div><?php endif; ?>
+                        <div class="wcof-map-buttons">
+                          <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($typed)); ?>">Mappa indirizzo</a>
+                          <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                        </div>
                       </div>
-                    </div>
-                  <?php elseif($address): ?>
-                    <div>
-                      <strong>Indirizzo mappa:</strong> <?php echo esc_html($address); ?>
-                      <div class="wcof-map-buttons">
-                        <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($address)); ?>">Mappa indirizzo</a>
-                        <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                    <?php elseif($address): ?>
+                      <div>
+                        <strong>Indirizzo mappa:</strong> <span class="wcof-address-text"><?php echo esc_html($address); ?></span>
+                        <div class="wcof-map-buttons">
+                          <a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($address)); ?>">Mappa indirizzo</a>
+                          <?php if($coords): ?><a class="btn btn-map" target="_blank" href="https://www.google.com/maps/search/?api=1&query=<?php echo esc_attr(rawurlencode($coords)); ?>">Mappa coord</a><?php endif; ?>
+                        </div>
                       </div>
-                    </div>
-                  <?php endif; ?>
+                    <?php endif; ?>
                   <div><strong>Telefono:</strong> <?php echo esc_html($phone); ?><?php if($phone): ?> <a class="btn btn-phone" target="_blank" href="tel:<?php echo esc_attr(preg_replace('/[^0-9+]/', '', $phone)); ?>">📞</a><?php endif; ?></div>
                   <?php if($payment): ?><div><strong>Payment:</strong> <?php echo esc_html($payment); ?></div><?php endif; ?>
                   <?php if($note): ?><div><strong>Note:</strong> <?php echo esc_html($note); ?></div><?php endif; ?>
@@ -796,7 +796,8 @@ exit;
         ob_start(); ?>
         <style>
           :root{ --wcf-card:#ffffff; --wcf-border:#e5e7eb; --wcf-shadow:0 6px 24px rgba(15,23,42,.06); --wcf-muted:#475569;}
-          .wcof-wrap{display:grid;grid-template-columns:1fr;gap:18px}
+          #wcof-order-list{width:100vw;margin-left:calc(50% - 50vw)}
+          .wcof-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%}
           .wcof-col{display:flex;flex-direction:column;gap:18px}
           .wcof-col-full{grid-column:1/-1}
           .wcof-section-title{margin:0 0 8px;font-weight:600}
@@ -813,39 +814,43 @@ exit;
           .wcof-service{margin-left:6px;font-size:12px;font-weight:600}
           .wcof-arrival{display:inline-block;padding:.35rem .6rem;border-radius:8px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-weight:600}
           .wcof-items{grid-column:2/6;padding:12px 16px;background:#f9fafb;border-top:1px dashed var(--wcf-border)}
-          .wcof-actions{display:flex;gap:8px;flex-wrap:wrap;justify-self:end;grid-column:2/6}
-          .wcof-eta{width:90px;border:1px solid var(--wcf-border);border-radius:8px;padding:.5rem .55rem;font-size:14px}
-          .btn{border:none;border-radius:8px;padding:.5rem .85rem;font-weight:600;font-size:14px;color:#fff;cursor:pointer;transition:background .2s;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;text-decoration:none}
+          .wcof-actions{display:flex;gap:10px;flex-wrap:wrap;justify-self:end;grid-column:2/6}
+          .wcof-eta{width:100px;border:1px solid var(--wcf-border);border-radius:10px;padding:.65rem .75rem;font-size:16px}
+          .btn{border:none;border-radius:12px;padding:.75rem 1.2rem;font-weight:600;font-size:16px;color:#fff;cursor:pointer;transition:background .2s,transform .05s;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;text-decoration:none}
+          .btn:active{transform:scale(.97)}
           .btn-approve{background:#3b82f6} .btn-approve:hover{background:#2563eb}
           .btn-reject{background:#94a3b8} .btn-reject:hover{background:#6b7280}
-          .btn-out{background:#f59e0b} .btn-out:hover{background:#d97706}
+          .btn-out{background:#f59e0b;font-size:18px;padding:.85rem 1.4rem} .btn-out:hover{background:#d97706}
           .btn-complete{background:#10b981} .btn-complete:hover{background:#059669}
           .btn-toggle{background:#6b7280} .btn-toggle:hover{background:#4b5563}
           .btn-map{background:#3b82f6} .btn-map:hover{background:#2563eb}
           .btn-phone{background:#10b981} .btn-phone:hover{background:#059669}
-          .wcof-info{margin-top:8px;font-size:14px;color:#334155}
+          .wcof-info{margin-top:8px;font-size:13px;color:#334155}
           .wcof-info div{margin-top:4px}
+          .wcof-address-text{font-size:12px}
           .wcof-address-extra{font-size:12px;color:#64748b;margin-top:2px}
           .wcof-map-buttons{margin-top:4px;display:flex;gap:4px;flex-wrap:wrap}
-          .wcof-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ececec}
+          .wcof-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ececec;font-size:16px}
+          .wcof-item span{font-weight:600}
           .wcof-item:last-child{border-bottom:0}
           .wcof-new{animation:wcofPulse 1s ease-in-out 5;background:#ecfdf5}
           @keyframes wcofPulse{0%{background:#d1fae5}50%{background:#ecfdf5}100%{background:#d1fae5}}
 
-          @media (max-width: 760px){
+          @media (max-width:1200px){
+            .wcof-wrap{grid-template-columns:repeat(2,1fr)}
+          }
+          @media (max-width:760px){
+            .wcof-wrap{grid-template-columns:1fr}
             .wcof-head{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:14px}
             .wcof-left{display:none}
             .wcof-eta{width:100%}
-            .btn{width:100%;padding:12px 14px;font-size:16px}
+            .btn{width:100%;padding:14px 16px;font-size:18px}
             .wcof-actions{display:grid;grid-template-columns:1fr;gap:8px;width:100%}
             .wcof-arrival{align-self:flex-start}
             .wcof-title{font-size:16px}
           }
-          @media (max-width: 380px){
+          @media (max-width:380px){
             .wcof-title{font-size:15px}
-          }
-          @media (min-width:1024px){
-            .wcof-wrap{grid-template-columns:repeat(3,1fr)}
           }
           .wcof-sound{position:fixed;right:14px;bottom:14px;background:#111;color:#fff;border-radius:24px;padding:.6rem .95rem;cursor:pointer;opacity:.9;z-index:9999;display:none}
         </style>
