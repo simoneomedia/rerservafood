@@ -131,6 +131,7 @@ final class WCOF_Plugin {
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
         add_action('woocommerce_order_status_processing',           [$this,'push_approved'], 20);
+        add_action('woocommerce_order_status_processing',           [$this,'push_rider_order_ready'], 20);
         add_action('woocommerce_order_status_out-for-delivery',     [$this,'push_out_for_delivery'], 20);
 
         // Service worker at root via rewrites
@@ -1737,9 +1738,10 @@ exit;
         if( empty($s['enable']) || empty($s['app_id']) ) return;
         wp_enqueue_script('wcof-onesignal', plugins_url('assets/onesignal-init.js', __FILE__), [], '1.9.0', true);
         wp_localize_script('wcof-onesignal', 'WCOF_PUSH', [
-            'appId' => $s['app_id'],
-            'userId' => get_current_user_id(),
+            'appId'   => $s['app_id'],
+            'userId'  => get_current_user_id(),
             'isAdmin' => current_user_can('manage_woocommerce') ? 1 : 0,
+            'isRider' => current_user_can('wcof_rider') ? 1 : 0,
         ]);
     }
 
@@ -1784,6 +1786,20 @@ exit;
             // Target the purchasing user via external ID and role tag
             'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'user' ] ],
             'include_external_user_ids' => [ (string)$uid ],
+            'ttl'=>300
+        ]);
+    }
+    public function push_rider_order_ready($order_id){
+        $s = $this->settings(); if( empty($s['notify_user_processing']) ) return;
+        $o = wc_get_order($order_id); if(!$o) return;
+        $eta = (int)$o->get_meta(self::META_ETA);
+        $title = '✅ Pedido confirmado #'.$o->get_order_number();
+        $url   = admin_url('post.php?post='.$order_id.'&action=edit');
+        $this->push_send([
+            'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
+            'contents'=>['en'=>'ETA ~ '.$eta.' min','es'=>'ETA ~ '.$eta.' min','it'=>'ETA ~ '.$eta.' min'],
+            'url'=>$url,
+            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'rider' ] ],
             'ttl'=>300
         ]);
     }

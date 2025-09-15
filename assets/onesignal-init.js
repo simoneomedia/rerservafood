@@ -28,6 +28,7 @@
       notifyButton: { enable: false }
     });
     if(WCOF_PUSH.isAdmin){ OneSignal.sendTag('wcof_role','admin'); }
+    else if(WCOF_PUSH.isRider){ OneSignal.sendTag('wcof_role','rider'); }
     else { OneSignal.sendTag('wcof_role','user'); }
     if(WCOF_PUSH.userId){ OneSignal.setExternalUserId(String(WCOF_PUSH.userId)); }
   });
