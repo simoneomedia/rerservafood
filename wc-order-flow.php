@@ -164,16 +164,31 @@ return $vars;
 }
 public function maybe_serve_sw(){
 $which = get_query_var('wcof_sw');
-if($which){
-http_response_code(200);
+if(!$which) return;
+
+$which = ($which === 'updater') ? 'updater' : 'worker';
+$cdn   = ($which === 'updater')
+    ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
+    : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
+
+if(function_exists('status_header')){
+    status_header(200);
+} else {
+    http_response_code(200);
+}
+
 header('Content-Type: application/javascript; charset=utf-8');
-header('Service-Worker-Allowed: /');
+if($which === 'worker'){
+    header('Service-Worker-Allowed: /');
+}
 header('Cache-Control: public, max-age=3600');
 header('X-Content-Type-Options: nosniff');
 header('X-Robots-Tag: noindex');
-echo "importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');\n";
-exit;
+
+if(!isset($_SERVER['REQUEST_METHOD']) || strtoupper($_SERVER['REQUEST_METHOD']) !== 'HEAD'){
+    echo "importScripts('$cdn');\n";
 }
+exit;
 }
 
     /* Avoid any 301/302 on SW files — redirects break registration */
