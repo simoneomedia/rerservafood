@@ -3,7 +3,7 @@
  * Plugin Name: Reeservafood
  * Description: App‑style order approvals for WooCommerce with ETA, “Rider on the way”, live order board, and integrated OneSignal Web Push (no extra plugin). Mobile‑first UI.
  * Author: Reeserva
- * Version: 1.9.3
+ * Version: 1.9.4
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * License: GPLv2 or later
@@ -956,6 +956,7 @@ exit;
               <?php endforeach; ?>
             </p>
             <p><label><?php esc_html_e('Opening time', 'wc-order-flow'); ?> <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></label></p>
+            <p><label><?php esc_html_e('Usual waiting time (min – max minutes)', 'wc-order-flow'); ?> <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_min]" value="<?php echo esc_attr($s['wait_min']); ?>" style="width:80px"/> – <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_max]" value="<?php echo esc_attr($s['wait_max']); ?>" style="width:80px"/></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Store closed', 'wc-order-flow'); ?></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></label></p>
             <p><button type="submit"><?php esc_html_e('Save settings', 'wc-order-flow'); ?></button></p>
@@ -1042,13 +1043,17 @@ exit;
             'postal_codes'=>isset($v['postal_codes'])?sanitize_text_field($v['postal_codes']):'',
             'delivery_radius'=>isset($v['delivery_radius'])?floatval($v['delivery_radius']):0,
             'delivery_polygon'=>isset($v['delivery_polygon'])?wp_kses_post($v['delivery_polygon']):'',
-            'language'=>isset($v['language'])?sanitize_text_field($v['language']):'auto'
+            'language'=>isset($v['language'])?sanitize_text_field($v['language']):'auto',
+            'wait_min'=>isset($v['wait_min'])?absint($v['wait_min']):0,
+            'wait_max'=>isset($v['wait_max'])?absint($v['wait_max']):0
         ];
         $days=['mon','tue','wed','thu','fri','sat','sun'];
         $out['open_days']=[];
         if(!empty($v['open_days']) && is_array($v['open_days'])){
             foreach($v['open_days'] as $d){ if(in_array($d,$days,true)) $out['open_days'][]=$d; }
         }
+        if($out['wait_max'] < $out['wait_min']) $out['wait_max'] = $out['wait_min'];
+        if($out['wait_max'] - $out['wait_min'] > 20) $out['wait_max'] = $out['wait_min'] + 20;
         return $out;
     }
     public function settings(){
@@ -1057,7 +1062,8 @@ exit;
             'enable'=>0,'app_id'=>'','rest_key'=>'','license_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
-            'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto'
+            'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto',
+            'wait_min'=>20,'wait_max'=>40
         ]);
     }
 
@@ -1126,6 +1132,7 @@ exit;
         if( !$checkout instanceof WC_Checkout ){
             $checkout = WC()->checkout();
         }
+        $s = $this->settings();
         $addr_value  = '';
         $town_value  = '';
         $door_value  = '';
@@ -1308,11 +1315,27 @@ exit;
         echo '<p class="wcof-move-marker"><a href="#" id="wcof-move-marker">'.esc_html__('Marker is wrong / let me set the marker','wc-order-flow').'</a></p>';
         echo '<div id="wcof-delivery-map" style="height:300px;margin-top:10px"></div>';
         echo '</div>'; // end wcof-delivery-details
+        $options = [ '' => __('As soon as possible','wc-order-flow') ];
+        $now = current_time('timestamp');
+        $wait_min = isset($s['wait_min']) ? absint($s['wait_min']) : 0;
+        $wait_max = isset($s['wait_max']) ? absint($s['wait_max']) : 0;
+        if($wait_max < $wait_min) $wait_max = $wait_min;
+        if($wait_max > 0){
+            $start = $now + $wait_max * 60;
+            $step  = max(1, $wait_min) * 60;
+            $close_str = $s['close_time'];
+            $close_ts = $close_str ? strtotime(date('Y-m-d', $now).' '.$close_str) : 0;
+            if($close_ts && $close_ts <= $now){ $close_ts += 86400; }
+            for($ts = $start; $close_ts && $ts <= $close_ts; $ts += $step){
+                $options[date('H:i', $ts)] = date_i18n('H:i', $ts);
+            }
+        }
         woocommerce_form_field('wcof_scheduled_time', [
-            'type'     => 'time',
+            'type'     => 'select',
             'class'    => [ 'form-row-wide' ],
             'required' => false,
             'label'    => __('Desired delivery time','wc-order-flow'),
+            'options'  => $options,
         ], $time_value);
         echo '</div>';
     }
@@ -1555,6 +1578,7 @@ exit;
                 <?php endforeach; ?>
               </td></tr>
               <tr><th scope="row"><?php esc_html_e('Opening time', 'wc-order-flow'); ?></th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
+              <tr><th scope="row"><?php esc_html_e('Usual waiting time (min – max minutes)', 'wc-order-flow'); ?></th><td><input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_min]" value="<?php echo esc_attr($s['wait_min']); ?>" style="width:80px"/> – <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_max]" value="<?php echo esc_attr($s['wait_max']); ?>" style="width:80px"/></td></tr>
               <tr><th scope="row"><?php esc_html_e('Store closed', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
             <tr><th scope="row"><?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
             </table>
