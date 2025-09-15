@@ -16,10 +16,25 @@
     if(btn) btn.textContent = enabled ? disableLabel : enableLabel;
   }
 
+  const registrationWarning = 'Service worker registration failed – check /OneSignalSDKWorker.js';
+
   function refresh(){
     OneSignal.push(function(){
       OneSignal.isPushNotificationsEnabled(function(enabled){
         updateUI(enabled);
+
+        if(typeof Notification !== 'undefined' && Notification.permission === 'granted' && !enabled){
+          console.warn(registrationWarning);
+
+          if(status){
+            const current = status.textContent || '';
+            if(current.indexOf(registrationWarning) === -1){
+              status.textContent = current
+                ? current + ' (' + registrationWarning + ')'
+                : registrationWarning;
+            }
+          }
+        }
       });
     });
   }
