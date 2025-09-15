@@ -30,7 +30,7 @@
     if(btn) btn.textContent = enabled ? disableLabel : enableLabel;
   }
 
-  const registrationWarning = 'Service worker registration failed – check /OneSignalSDKWorker.js';
+  const registrationWarning = 'Service worker registration failed – check /OneSignalSDKWorker.js and /OneSignalSDKUpdaterWorker.js';
 
   function refresh(){
     OneSignal.push(function(){
