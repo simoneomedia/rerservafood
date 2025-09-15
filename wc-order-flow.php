@@ -91,6 +91,7 @@ final class WCOF_Plugin {
 
         // Thank you page hero (live)
         add_action('woocommerce_before_thankyou', [$this,'thankyou_hero'], 5);
+        add_action('woocommerce_view_order',      [$this,'thankyou_hero'], 5);
 
         // Orders board (front)
         add_shortcode('wcof_orders_admin',   [$this,'shortcode_orders_admin']);
@@ -1778,7 +1779,7 @@ exit;
         $o = wc_get_order($order_id); if(!$o) return; $uid = (int)$o->get_user_id(); if(!$uid) return;
         $eta = (int)$o->get_meta(self::META_ETA);
         $title = '✅ Pedido confirmado #'.$o->get_order_number();
-        $url = wc_get_endpoint_url('view-order', $order_id, wc_get_page_permalink('myaccount'));
+        $url = $o->get_checkout_order_received_url();
         $this->push_send([
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'ETA ~ '.$eta.' min','es'=>'ETA ~ '.$eta.' min','it'=>'ETA ~ '.$eta.' min'],
@@ -1807,7 +1808,7 @@ exit;
         $s = $this->settings(); if( empty($s['notify_user_out']) ) return;
         $o = wc_get_order($order_id); if(!$o) return; $uid = (int)$o->get_user_id(); if(!$uid) return;
         $title = '🚴 Rider en camino #'.$o->get_order_number();
-        $url = wc_get_endpoint_url('view-order', $order_id, wc_get_page_permalink('myaccount'));
+        $url = $o->get_checkout_order_received_url();
         $this->push_send([
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'Entrega en curso','es'=>'Entrega en curso','it'=>'Consegna in corso'],
