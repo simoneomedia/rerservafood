@@ -1,4 +1,5 @@
 (function(){
+  window.OneSignal = window.OneSignal || [];
   function el(id){ return document.getElementById(id); }
   const btn = el('wcof-push-btn');
   const status = el('wcof-push-status');
@@ -16,7 +17,6 @@
   }
 
   function refresh(){
-    if(!window.OneSignal){ setTimeout(refresh, 400); return; }
     OneSignal.push(function(){
       OneSignal.isPushNotificationsEnabled(function(enabled){
         updateUI(enabled);
@@ -26,7 +26,6 @@
 
   if(btn){
     btn.addEventListener('click', function(){
-      if(!window.OneSignal) return;
       OneSignal.push(function(){
         OneSignal.isPushNotificationsEnabled(function(enabled){
           if(enabled){
@@ -50,12 +49,9 @@
     });
   }
 
-  (function waitForOneSignal(){
-    if(!window.OneSignal){ setTimeout(waitForOneSignal, 400); return; }
-    OneSignal.push(function(){
-      OneSignal.on('subscriptionChange', refresh);
-    });
-  })();
+  OneSignal.push(function(){
+    OneSignal.on('subscriptionChange', refresh);
+  });
 
   refresh();
 })();
