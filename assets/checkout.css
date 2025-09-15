@@ -76,3 +76,19 @@
   background: #eef;
 }
 
+/* Improve toggle interaction */
+#wcof-service-toggle .wcof-mode-btn {
+  transition: background .2s, border-color .2s;
+}
+#wcof-service-toggle .wcof-mode-btn:hover {
+  border-color: #4f46e5;
+}
+
+/* Spacing and hidden generated address text */
+#wcof-checkout-address .form-row-wide {
+  margin-bottom: 12px;
+}
+#wcof-resolved-display {
+  display: none;
+}
+

@@ -56,6 +56,7 @@
         var coordInput = get('wcof_delivery_coords');
         var validInput = get('wcof_delivery_valid');
         var summaryEl = document.getElementById('wcof-resolved-display');
+        if(summaryEl) summaryEl.style.display='none';
         var addressSelect = document.getElementById('wcof-address-select');
         var serviceInput = get('wcof_service_type');
         var deliveryFields = document.getElementById('wcof-delivery-details');
@@ -196,10 +197,7 @@
                     hideError();
                     var full = data.display_name || '';
                     if(resolvedInput) resolvedInput.value = full;
-                    if(summaryEl){
-                        summaryEl.textContent = full + ' (' + latlng.lat + ',' + latlng.lng + ')';
-                        summaryEl.style.display = 'block';
-                    }
+                    if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
                     document.querySelector('#billing_postcode').value = pc;
                     document.querySelector('#billing_address_1').value = full;
                     document.querySelector('#billing_city').value = addr.city || addr.town || addr.village || '';
@@ -330,10 +328,7 @@
                 if(coordInput) coordInput.value = opt.getAttribute('data-coords') || '';
                 var r = opt.getAttribute('data-resolved') || '';
                 var c = opt.getAttribute('data-coords') || '';
-                if(summaryEl){
-                    if(r && c){ summaryEl.textContent = r + ' (' + c + ')'; summaryEl.style.display='block'; }
-                    else { summaryEl.textContent=''; summaryEl.style.display='none'; }
-                }
+                if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
                 if(c){
                     suppressSearch = true;
                     var parts = c.split(',');
@@ -395,10 +390,7 @@
                 if(promise && typeof promise.then === 'function' && typedAddress){
                     promise.then(function(){ addrInput.value = typedAddress; });
                 }
-                if(resolvedInput && resolvedInput.value && summaryEl){
-                    summaryEl.textContent = resolvedInput.value + ' (' + coordInput.value + ')';
-                    summaryEl.style.display = 'block';
-                }
+                if(summaryEl){ summaryEl.textContent=''; summaryEl.style.display='none'; }
             }
         }else if(townInput.value && addrInput.value){
             // Coordinates not yet known but we have text fields

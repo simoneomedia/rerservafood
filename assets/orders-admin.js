@@ -67,7 +67,6 @@
     const note = htmlEscape(o.note||'');
     const payment = htmlEscape(o.payment||'');
     const meta = o.meta && typeof o.meta === 'object' ? Object.assign({}, o.meta) : {};
-    const tip = meta._wcof_tip; if(tip!==undefined){ delete meta._wcof_tip; }
     const sched = meta._wcof_scheduled_time; if(sched!==undefined){ delete meta._wcof_scheduled_time; }
     const serviceType = meta._wcof_service_type === 'takeaway' ? 'takeaway' : 'delivery';
     delete meta._wcof_service_type;
@@ -89,7 +88,6 @@
 
             <div><strong>Telefono:</strong> ${phone} ${o.phone?`<a class=\"btn btn-phone\" href=\"tel:${encodeURIComponent(o.phone)}\" target=\"_blank\">\u260E\ufe0f</a>`:''}</div>
             ${payment?`<div><strong>Payment:</strong> ${payment}</div>`:''}
-            ${tip?`<div><strong>Tip:</strong> ${htmlEscape(tip)}</div>`:''}
             ${sched?`<div><strong>Scheduled time:</strong> ${htmlEscape(sched)}</div>`:''}
             <div><strong>Note:</strong> ${note || '—'}</div>
             ${metaHtml}
