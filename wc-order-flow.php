@@ -1136,7 +1136,6 @@ exit;
         $addr_value  = '';
         $town_value  = '';
         $door_value  = '';
-        $tip_value   = '';
         $time_value  = '';
         $resolved_value = '';
         $coords_value   = '';
@@ -1144,7 +1143,6 @@ exit;
             $addr_value    = $checkout->get_value('wcof_delivery_address');
             $town_value    = $checkout->get_value('wcof_delivery_town');
             $door_value    = $checkout->get_value('wcof_delivery_door');
-            $tip_value     = $checkout->get_value('wcof_tip');
             $time_value    = $checkout->get_value('wcof_scheduled_time');
             $resolved_value = $checkout->get_value('wcof_delivery_resolved');
             $coords_value   = $checkout->get_value('wcof_delivery_coords');
@@ -1275,22 +1273,10 @@ exit;
             'required' => false,
             'label'    => __('Apartment or Door #','wc-order-flow'),
         ], $door_value);
-        woocommerce_form_field('wcof_tip', [
-            'type'     => 'number',
-            'class'    => [ 'form-row-wide' ],
-            'required' => false,
-            'label'    => __('Tip amount','wc-order-flow'),
-            'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
-        ], $tip_value);
         // Error message container shown when the typed address is
         // outside the delivery area or cannot be resolved.
         echo '<p id="wcof-delivery-error" style="color:#dc2626;display:none;margin-top:4px"></p>';
-        // Display resolved address and coordinates once found.
-        $summary = '';
-        if($resolved_value && $coords_value){
-            $summary = esc_html($resolved_value) . ' (' . esc_html($coords_value) . ')';
-        }
-        echo '<p id="wcof-resolved-display" style="margin-top:4px;'.($summary ? '' : 'display:none;').'">'.$summary.'</p>';
+        echo '<p id="wcof-resolved-display" style="display:none;"></p>';
         if( count($prev_addresses) > 0 ){
             echo '<p><label for="wcof-address-select">'.esc_html__('Select from your addresses','wc-order-flow').'</label>';
             echo '<select id="wcof-address-select" style="width:100%">';
@@ -1412,7 +1398,6 @@ exit;
         $town = isset($_POST['wcof_delivery_town']) ? sanitize_text_field($_POST['wcof_delivery_town']) : '';
         $addr = isset($_POST['wcof_delivery_address']) ? sanitize_text_field($_POST['wcof_delivery_address']) : '';
         $door = isset($_POST['wcof_delivery_door']) ? sanitize_text_field($_POST['wcof_delivery_door']) : '';
-        $tip  = isset($_POST['wcof_tip']) ? floatval($_POST['wcof_tip']) : '';
         $time = isset($_POST['wcof_scheduled_time']) ? sanitize_text_field($_POST['wcof_scheduled_time']) : '';
         if($service === 'takeaway'){
             if($time !== ''){
@@ -1450,9 +1435,6 @@ exit;
                 $order->update_meta_data('_wcof_delivery_coords', $coords);
             }
         }
-        if($tip !== '' && $tip >= 0){
-            $order->update_meta_data('_wcof_tip', wc_format_decimal($tip));
-        }
         if($time !== ''){
             $order->update_meta_data('_wcof_scheduled_time', $time);
         }
@@ -1463,7 +1445,6 @@ exit;
         $typed    = $order->get_meta('_wcof_delivery_address');
         $resolved = $order->get_meta('_wcof_delivery_resolved');
         $coords   = $order->get_meta('_wcof_delivery_coords');
-        $tip      = $order->get_meta('_wcof_tip');
         $time     = $order->get_meta('_wcof_scheduled_time');
         if($typed){
             echo '<p><strong>'.esc_html__('Address','wc-order-flow').':</strong> '.esc_html($typed).'</p>';
@@ -1473,9 +1454,6 @@ exit;
         }
         if($coords){
             echo '<p><strong>'.esc_html__('Coordinates','wc-order-flow').':</strong> '.esc_html($coords).'</p>';
-        }
-        if($tip !== ''){
-            echo '<p><strong>'.esc_html__('Tip','wc-order-flow').':</strong> '.wc_price($tip, ['currency'=>$order->get_currency()]).'</p>';
         }
         if($time){
             echo '<p><strong>'.esc_html__('Scheduled time','wc-order-flow').':</strong> '.esc_html($time).'</p>';
@@ -1501,7 +1479,6 @@ exit;
         $typed    = $order->get_meta('_wcof_delivery_address');
         $resolved = $order->get_meta('_wcof_delivery_resolved');
         $coords   = $order->get_meta('_wcof_delivery_coords');
-        $tip      = $order->get_meta('_wcof_tip');
         $time     = $order->get_meta('_wcof_scheduled_time');
         if($typed){
             $fields['wcof_delivery_address'] = [
@@ -1519,12 +1496,6 @@ exit;
             $fields['wcof_delivery_coords'] = [
                 'label' => __('Coordinates','wc-order-flow'),
                 'value' => $coords,
-            ];
-        }
-        if($tip !== ''){
-            $fields['wcof_tip'] = [
-                'label' => __('Tip','wc-order-flow'),
-                'value' => wc_price($tip, ['currency'=>$order->get_currency()]),
             ];
         }
         if($time){
