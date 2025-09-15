@@ -796,11 +796,13 @@ exit;
         ob_start(); ?>
         <style>
           :root{ --wcf-card:#ffffff; --wcf-border:#e5e7eb; --wcf-shadow:0 6px 24px rgba(15,23,42,.06); --wcf-muted:#475569;}
-          #wcof-order-list{width:100vw;max-width:none;margin-left:calc(50% - 50vw)}
-          .wcof-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%}
-          .wcof-col{display:flex;flex-direction:column;gap:18px}
+          #wcof-order-list{width:95vw;max-width:1400px;margin:0 auto;border:1px solid var(--wcf-border)}
+          .wcof-wrap{display:grid;grid-template-columns:repeat(3,1fr);width:100%;gap:0}
+          .wcof-col{display:flex;flex-direction:column;gap:18px;padding:0 12px}
+          #wcof-order-list > .wcof-col:nth-child(-n+3){border-right:1px solid var(--wcf-border)}
           .wcof-col-full{grid-column:1/-1}
-          .wcof-section-title{margin:0 0 8px;font-weight:600}
+          .wcof-section-title{margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:6px}
+          .wcof-section-title span{font-size:20px}
           .wcof-card{background:var(--wcf-card);border:1px solid var(--wcf-border);border-radius:18px;box-shadow:var(--wcf-shadow);overflow:hidden}
           .wcof-head{display:grid;grid-template-columns:8px 1fr auto auto auto;gap:14px;align-items:center;padding:16px}
           .wcof-left{grid-column:1/2;width:6px;height:100%;border-radius:6px;grid-row:1/span 3}
@@ -856,15 +858,15 @@ exit;
         </style>
         <div id="wcof-order-list" class="wcof-wrap">
           <div class="wcof-col" data-status="<?php echo esc_attr(self::STATUS_AWAITING); ?>">
-            <h2 class="wcof-section-title"><?php esc_html_e('Waiting for approval','wc-order-flow'); ?></h2>
+            <h2 class="wcof-section-title"><span>⏳</span><?php esc_html_e('Waiting for approval','wc-order-flow'); ?></h2>
             <?php foreach($groups[self::STATUS_AWAITING] as $c){ echo $c['html']; } ?>
           </div>
           <div class="wcof-col" data-status="wc-processing">
-            <h2 class="wcof-section-title"><?php esc_html_e('Preparing','wc-order-flow'); ?></h2>
+            <h2 class="wcof-section-title"><span>👩‍🍳</span><?php esc_html_e('Preparing','wc-order-flow'); ?></h2>
             <?php foreach($groups['wc-processing'] as $c){ echo $c['html']; } ?>
           </div>
           <div class="wcof-col" data-status="<?php echo esc_attr(self::STATUS_OUT_FOR_DELIVERY); ?>">
-            <h2 class="wcof-section-title"><?php esc_html_e('In delivery','wc-order-flow'); ?></h2>
+            <h2 class="wcof-section-title"><span>🛵</span><?php esc_html_e('In delivery','wc-order-flow'); ?></h2>
             <?php foreach($groups[self::STATUS_OUT_FOR_DELIVERY] as $c){ echo $c['html']; } ?>
           </div>
           <div class="wcof-col wcof-col-full" data-status="wc-completed">
