@@ -47,11 +47,13 @@
               <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.approve_url||'')}">Approva</button>
               <button class="btn btn-reject" data-action="reject" data-url="${htmlEscape(o.reject_url||'')}">Rifiuta</button>`;
     } else if(o.status==='wc-processing'){
-      return `<input type="number" min="0" step="1" placeholder="ETA min" value="${htmlEscape(o.eta||'')}" class="wcof-eta">
+      return `<button class="btn btn-toggle" data-action="toggle">Dettagli</button>
+              <input type="number" min="0" step="1" placeholder="ETA min" value="${htmlEscape(o.eta||'')}" class="wcof-eta">
               <button class="btn btn-approve" data-action="approve" data-url="${htmlEscape(o.set_eta_url||'')}">Aggiorna ETA</button>
               <a class="btn btn-out" data-action="out" data-complete-url="${htmlEscape(o.complete_url||'')}" href="${htmlEscape(o.out_url||'')}">In Consegna</a>`;
     } else if(o.status==='wc-out-for-delivery'){
-      return `<a class="btn btn-complete" data-action="complete" href="${htmlEscape(o.complete_url||'')}">Complete</a>`;
+      return `<button class="btn btn-toggle" data-action="toggle">Dettagli</button>
+              <a class="btn btn-complete" data-action="complete" href="${htmlEscape(o.complete_url||'')}">Complete</a>`;
     } else if(o.status==='wc-completed'){
       return `<button class="btn btn-toggle" data-action="toggle">Dettagli</button>`;
     }
@@ -60,7 +62,7 @@
   function cardHTML(o){
     const items = Array.isArray(o.items)?o.items:[];
     const arrival = o.arrival ? `<span class="wcof-arrival">${htmlEscape(o.arrival)}</span>` : '—';
-    const collapsed = o.status==='wc-completed';
+    const collapsed = o.status==='wc-completed' || o.status==='wc-processing' || o.status==='wc-out-for-delivery';
     const address = htmlEscape(o.address||'');
     const typed = htmlEscape(o.address_typed||'');
     const phone = htmlEscape(o.phone||'');
@@ -79,6 +81,7 @@
         <div class="wcof-meta">
           <p class="wcof-title">#${htmlEscape(o.number||o.id||'')} <span class="wcof-badge">${htmlEscape(o.status_name || statusName(o.status)||'')}</span> <span class="wcof-service">${serviceHtml}</span></p>
           <p style="color:#475569">${htmlEscape(o.customer||'')}</p>
+          ${payment?`<p class="wcof-pay" style="color:#475569">${payment}</p>`:''}
         </div>
         <div class="wcof-total"><strong>${htmlEscape(o.total||'')}</strong></div>
         <div class="wcof-arrival-wrap">${arrival}</div>
@@ -88,7 +91,6 @@
             ${typed ? `<div><strong>Indirizzo digitato:</strong> <span class=\"wcof-address-text\">${typed}</span>${address?`<div class=\"wcof-address-extra\">(${address})</div>`:''}${(o.address_typed||o.coords)?`<div class=\"wcof-map-buttons\">${o.address_typed?`<a class=\"btn btn-map\" target=\"_blank\" href=\"https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address_typed)}\">Mappa indirizzo</a>`:''}${o.coords?` <a class=\"btn btn-map\" target=\"_blank\" href=\"https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.coords)}\">Mappa coord</a>`:''}</div>`:''}</div>` : (address?`<div><strong>Indirizzo mappa:</strong> <span class=\"wcof-address-text\">${address}</span>${o.coords?`<div class=\"wcof-map-buttons\"><a class=\"btn btn-map\" target=\"_blank\" href=\"https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.coords)}\">Mappa</a></div>`:''}</div>`:'')}
 
             <div><strong>Telefono:</strong> ${phone} ${o.phone?`<a class=\"btn btn-phone\" href=\"tel:${encodeURIComponent(o.phone)}\" target=\"_blank\">\u260E\ufe0f</a>`:''}</div>
-            ${payment?`<div><strong>Payment:</strong> ${payment}</div>`:''}
             ${tip?`<div><strong>Tip:</strong> ${htmlEscape(tip)}</div>`:''}
             ${sched?`<div><strong>Scheduled time:</strong> ${htmlEscape(sched)}</div>`:''}
             <div><strong>Note:</strong> ${note || '—'}</div>
@@ -188,6 +190,12 @@
             if(left){ left.classList.remove('st-proc'); left.classList.add('st-out'); }
             const badge = card.querySelector('.wcof-badge');
             if(badge) badge.textContent = statusName('wc-out-for-delivery');
+            const items = card.querySelector('.wcof-items');
+            if(items) items.style.display = 'none';
+            const etaIn = card.querySelector('.wcof-eta');
+            const btnAp = card.querySelector('.btn-approve');
+            if(etaIn) etaIn.remove();
+            if(btnAp) btnAp.remove();
             t.textContent = 'Complete';
             t.classList.remove('btn-out');
             t.classList.add('btn-complete');
