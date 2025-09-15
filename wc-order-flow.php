@@ -140,6 +140,7 @@ final class WCOF_Plugin {
         add_filter('query_vars', [$this,'add_query_vars']);
         add_action('template_redirect', [$this,'maybe_serve_sw']);
         add_filter('redirect_canonical', [$this,'prevent_sw_canonical'], 10, 2);
+        add_action('update_option_' . self::OPTION_KEY, [$this,'maybe_flush_sw_rewrite'], 10, 2);
 
         // Push shortcodes (button + debug)
         add_shortcode('wcof_push_button', [$this,'shortcode_push_button']);
@@ -181,6 +182,16 @@ exit;
         $path = wp_parse_url($requested, PHP_URL_PATH);
         if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js') return false;
         return $redirect_url;
+    }
+
+    // Flush rewrite rules when push is enabled to ensure SW scripts load
+    public function maybe_flush_sw_rewrite($old, $new){
+        $old_enabled = !empty($old['enable']);
+        $new_enabled = !empty($new['enable']);
+        if(!$old_enabled && $new_enabled){
+            $this->register_sw_rewrite();
+            flush_rewrite_rules();
+        }
     }
 
     public function set_locale($locale, $domain){
