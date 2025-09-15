@@ -616,7 +616,7 @@ exit;
               var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
               if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='block'; ic.style.animation='wcof-pop .5s ease-out';}
               if(t){
-                var tpl = '<?php echo esc_js(__('<strong>Order confirmed.</strong> In preparation. <span class="wcof-chip">Arrival approx. %s</span>', 'wc-order-flow')); ?>';
+                var tpl = <?php echo wp_json_encode(__('<strong>Order confirmed.</strong> In preparation. <span class="wcof-chip">Arrival approx. %s</span>', 'wc-order-flow')); ?>;
                 t.innerHTML = tpl.replace('%s', arrival);
               }
               if(s){ s.textContent = '<?php echo esc_js(__('Estimated time: %s min', 'wc-order-flow')); ?>'.replace('%s', (eta||'?')); }
@@ -626,7 +626,7 @@ exit;
               var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
               if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='block';}
               if(t){
-                var tpl2 = '<?php echo esc_js(__('<strong>Rider on the way.</strong> <span class="wcof-chip">Arrival %s</span>', 'wc-order-flow')); ?>';
+                var tpl2 = <?php echo wp_json_encode(__('<strong>Rider on the way.</strong> <span class="wcof-chip">Arrival %s</span>', 'wc-order-flow')); ?>;
                 t.innerHTML = tpl2.replace('%s', arrival);
               }
               if(s){ s.textContent='<?php echo esc_js(__('You can follow the status here.', 'wc-order-flow')); ?>'; }
@@ -635,14 +635,14 @@ exit;
             function showRejected(){
               var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
               if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='none';}
-              if(t){ t.innerHTML='<?php echo esc_js(__('<strong>Order rejected.</strong>', 'wc-order-flow')); ?>'; }
+              if(t){ t.innerHTML=<?php echo wp_json_encode(__('<strong>Order rejected.</strong>', 'wc-order-flow')); ?>; }
               if(s){ s.textContent='<?php echo esc_js(__('Sorry, order rejected.', 'wc-order-flow')); ?>'; }
               setBar(100);
             }
             function showCompleted(){
               var sp=document.getElementById('wcof-spinner'), ic=document.getElementById('wcof-icon'), t=document.getElementById('wcof-title'), s=document.getElementById('wcof-status');
               if(sp){sp.classList.add('wcof-hide');} if(ic){ic.style.display='block';}
-              if(t){ t.innerHTML='<?php echo esc_js(__('<strong>Enjoy!</strong> ☺️', 'wc-order-flow')); ?>'; }
+              if(t){ t.innerHTML=<?php echo wp_json_encode(__('<strong>Enjoy!</strong> ☺️', 'wc-order-flow')); ?>; }
               if(s){ s.textContent=''; }
               setBar(100);
             }
