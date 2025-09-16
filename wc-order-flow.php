@@ -1876,6 +1876,8 @@ exit;
     public function push_new_order($order_id){
         $s = $this->settings(); if( empty($s['notify_admin_new']) ) return;
         $o = wc_get_order($order_id); if(!$o) return;
+        $status = 'wc-'.$o->get_status();
+        if($status !== self::STATUS_AWAITING) return;
         $recipients = $this->push_external_user_ids_for_capability('manage_woocommerce');
         if(empty($recipients)) return;
         $title = '🛎️ Nuevo pedido #'.$o->get_order_number();
@@ -1893,7 +1895,11 @@ exit;
         $s = $this->settings(); if( empty($s['notify_user_processing']) ) return;
         $o = wc_get_order($order_id); if(!$o) return;
         $recipients = $this->push_external_user_ids_for_capability('wcof_rider');
+        $recipients = array_filter(array_map('intval', (array)$recipients), function($user_id){
+            return $user_id > 0 && !user_can($user_id, 'manage_woocommerce');
+        });
         if(empty($recipients)) return;
+        $recipients = array_map('strval', array_values(array_unique($recipients)));
         $eta = (int)$o->get_meta(self::META_ETA);
         $title = '✅ Pedido confirmado #'.$o->get_order_number();
         $url   = admin_url('post.php?post='.$order_id.'&action=edit');
