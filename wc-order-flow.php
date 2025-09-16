@@ -21,6 +21,7 @@ final class WCOF_Plugin {
     const META_LOCK    = '_wcof_lock';
     const STATUS_AWAITING = 'wc-on-hold';
     const STATUS_OUT_FOR_DELIVERY = 'wc-out-for-delivery';
+    const SW_REWRITE_VERSION = 2;
 
     public static function activate(){
         $self = new self();
@@ -28,6 +29,7 @@ final class WCOF_Plugin {
         if( !get_option('wcof_setup_done') ) add_option('wcof_setup_done', 0);
         add_role('rider', __('Rider', 'wc-order-flow'), ['read'=>true,'wcof_rider'=>true]);
         flush_rewrite_rules();
+        update_option('wcof_sw_rewrite_version', self::SW_REWRITE_VERSION);
 
         // Switch checkout page to classic shortcode
         if( function_exists('wc_get_page_id') ){
@@ -57,6 +59,7 @@ final class WCOF_Plugin {
     public static function deactivate(){
         remove_role('rider');
         flush_rewrite_rules();
+        delete_option('wcof_sw_rewrite_version');
         $timestamp = wp_next_scheduled('wcof_check_license');
         if($timestamp) wp_unschedule_event($timestamp, 'wcof_check_license');
     }
@@ -141,6 +144,7 @@ final class WCOF_Plugin {
         add_action('template_redirect', [$this,'maybe_serve_sw']);
         add_filter('redirect_canonical', [$this,'prevent_sw_canonical'], 10, 2);
         add_action('update_option_' . self::OPTION_KEY, [$this,'maybe_flush_sw_rewrite'], 10, 2);
+        add_action('admin_init', [$this,'maybe_force_sw_rewrite_flush']);
 
         // Push shortcodes (button + debug)
         add_shortcode('wcof_push_button', [$this,'shortcode_push_button']);
@@ -157,6 +161,7 @@ final class WCOF_Plugin {
 public function register_sw_rewrite(){
 add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?wcof_sw=worker', 'top');
 add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
+add_rewrite_rule('^UpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
 }
 public function add_query_vars($vars){
 $vars[]='wcof_sw';
@@ -195,7 +200,7 @@ exit;
     public function prevent_sw_canonical($redirect_url, $requested){
         if (isset($_GET['wcof_sw'])) return false;
         $path = wp_parse_url($requested, PHP_URL_PATH);
-        if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js') return false;
+        if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js') return false;
         return $redirect_url;
     }
 
@@ -207,6 +212,15 @@ exit;
             $this->register_sw_rewrite();
             flush_rewrite_rules();
         }
+    }
+
+    public function maybe_force_sw_rewrite_flush(){
+        $current = (int) get_option('wcof_sw_rewrite_version', 0);
+        if($current >= self::SW_REWRITE_VERSION) return;
+
+        $this->register_sw_rewrite();
+        flush_rewrite_rules();
+        update_option('wcof_sw_rewrite_version', self::SW_REWRITE_VERSION);
     }
 
     public function set_locale($locale, $domain){
