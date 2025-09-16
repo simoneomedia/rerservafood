@@ -135,7 +135,6 @@ final class WCOF_Plugin {
 
         add_action('woocommerce_new_order',                         [$this,'push_new_order'], 20);
         add_action('woocommerce_order_status_processing',           [$this,'push_approved'], 20);
-        add_action('woocommerce_order_status_processing',           [$this,'push_rider_order_ready'], 20);
         add_action('woocommerce_order_status_out-for-delivery',     [$this,'push_out_for_delivery'], 20);
 
         // Service worker at root via rewrites
@@ -1616,10 +1615,8 @@ exit;
             <h2><?php esc_html_e('Notify on', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
               <tr><th><?php esc_html_e('Admin', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_admin_new]" value="1" <?php checked($s['notify_admin_new'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('New order', 'wc-order-flow'); ?></label></td></tr>
-              <tr><th><?php esc_html_e('User', 'wc-order-flow'); ?></th><td>
-                <label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_processing]" value="1" <?php checked($s['notify_user_processing'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('Approved', 'wc-order-flow'); ?></label><br/>
-                <label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_out]" value="1" <?php checked($s['notify_user_out'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('Rider on the way', 'wc-order-flow'); ?></label>
-              </td></tr>
+              <tr><th><?php esc_html_e('Rider', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_processing]" value="1" <?php checked($s['notify_user_processing'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('Approved', 'wc-order-flow'); ?></label></td></tr>
+              <tr><th><?php esc_html_e('Customer', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[notify_user_out]" value="1" <?php checked($s['notify_user_out'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('Rider on the way', 'wc-order-flow'); ?></label></td></tr>
             </table>
             <?php submit_button(); ?>
           </form>
@@ -1811,38 +1808,74 @@ exit;
         ]);
         if( is_wp_error($res) ) error_log('WCOF push error: '.$res->get_error_message());
     }
+    private function push_external_user_ids_for_capability($capability){
+        $capability = (string)$capability;
+        if($capability === '') return [];
+        static $cache = [];
+        if(isset($cache[$capability])) return $cache[$capability];
+
+        $roles = [];
+        if(function_exists('wp_roles')){
+            $role_objects = wp_roles()->role_objects;
+            foreach($role_objects as $role_key => $role_obj){
+                if($role_obj->has_cap($capability)){
+                    $roles[] = $role_key;
+                }
+            }
+        }
+        if($capability === 'manage_woocommerce'){
+            $roles[] = 'administrator';
+            $roles[] = 'shop_manager';
+        }
+        $roles = array_values(array_unique(array_filter($roles)));
+
+        $user_ids = [];
+        if(!empty($roles)){
+            $user_ids = get_users([
+                'role__in' => $roles,
+                'fields'   => 'ids',
+                'number'   => -1,
+            ]);
+        }
+        if(empty($user_ids)){
+            $all_ids = get_users([
+                'fields' => 'ids',
+                'number' => -1,
+            ]);
+            foreach($all_ids as $user_id){
+                if(user_can($user_id, $capability)){
+                    $user_ids[] = $user_id;
+                }
+            }
+        }
+
+        $user_ids = array_map('intval', (array)$user_ids);
+        $user_ids = array_filter($user_ids, function($id){ return $id > 0; });
+        $user_ids = array_values(array_unique($user_ids));
+        $cache[$capability] = array_map('strval', $user_ids);
+        return $cache[$capability];
+    }
     public function push_new_order($order_id){
         $s = $this->settings(); if( empty($s['notify_admin_new']) ) return;
         $o = wc_get_order($order_id); if(!$o) return;
+        $recipients = $this->push_external_user_ids_for_capability('manage_woocommerce');
+        if(empty($recipients)) return;
         $title = '🛎️ Nuevo pedido #'.$o->get_order_number();
         $url   = admin_url('post.php?post='.$order_id.'&action=edit');
         $this->push_send([
             'headings' => [ 'en'=>$title, 'es'=>$title, 'it'=>$title ],
             'contents' => [ 'en'=>'Total '.$o->get_formatted_order_total(), 'es'=>'Total '.$o->get_formatted_order_total(), 'it'=>'Totale '.$o->get_formatted_order_total() ],
             'url'      => $url,
-            'filters'  => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'admin' ] ],
+            'include_external_user_ids' => $recipients,
+            'channel_for_external_user_ids' => 'push',
             'ttl'      => 120
         ]);
     }
     public function push_approved($order_id){
         $s = $this->settings(); if( empty($s['notify_user_processing']) ) return;
-        $o = wc_get_order($order_id); if(!$o) return; $uid = (int)$o->get_user_id(); if(!$uid) return;
-        $eta = (int)$o->get_meta(self::META_ETA);
-        $title = '✅ Pedido confirmado #'.$o->get_order_number();
-        $url = $o->get_checkout_order_received_url();
-        $this->push_send([
-            'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
-            'contents'=>['en'=>'ETA ~ '.$eta.' min','es'=>'ETA ~ '.$eta.' min','it'=>'ETA ~ '.$eta.' min'],
-            'url'=>$url,
-            // Target the purchasing user via external ID and role tag
-            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'user' ] ],
-            'include_external_user_ids' => [ (string)$uid ],
-            'ttl'=>300
-        ]);
-    }
-    public function push_rider_order_ready($order_id){
-        $s = $this->settings(); if( empty($s['notify_user_processing']) ) return;
         $o = wc_get_order($order_id); if(!$o) return;
+        $recipients = $this->push_external_user_ids_for_capability('wcof_rider');
+        if(empty($recipients)) return;
         $eta = (int)$o->get_meta(self::META_ETA);
         $title = '✅ Pedido confirmado #'.$o->get_order_number();
         $url   = admin_url('post.php?post='.$order_id.'&action=edit');
@@ -1850,7 +1883,8 @@ exit;
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'ETA ~ '.$eta.' min','es'=>'ETA ~ '.$eta.' min','it'=>'ETA ~ '.$eta.' min'],
             'url'=>$url,
-            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'rider' ] ],
+            'include_external_user_ids' => $recipients,
+            'channel_for_external_user_ids' => 'push',
             'ttl'=>300
         ]);
     }
@@ -1863,8 +1897,8 @@ exit;
             'headings'=>['en'=>$title,'es'=>$title,'it'=>$title],
             'contents'=>['en'=>'Entrega en curso','es'=>'Entrega en curso','it'=>'Consegna in corso'],
             'url'=>$url,
-            'filters' => [ [ 'field'=>'tag','key'=>'wcof_role','relation'=>'=','value'=>'user' ] ],
             'include_external_user_ids' => [ (string)$uid ],
+            'channel_for_external_user_ids' => 'push',
             'ttl'=>300
         ]);
     }

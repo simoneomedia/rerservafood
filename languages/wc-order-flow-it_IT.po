@@ -189,6 +189,9 @@ msgstr "Admin"
 msgid "User"
 msgstr "Utente"
 
+msgid "Customer"
+msgstr "Cliente"
+
 msgid "Approved"
 msgstr "Approvato"
 
