@@ -18,3 +18,6 @@ msgstr "Install prompt text"
 
 msgid "Add this page to your home screen via your browser menu"
 msgstr "Add this page to your home screen via your browser menu"
+
+msgid "Customer"
+msgstr "Customer"
