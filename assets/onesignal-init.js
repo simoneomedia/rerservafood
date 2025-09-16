@@ -29,6 +29,18 @@
     console.error('[OneSignal] SDK script failed to load.', event);
   });
 
+  function flagIsTrue(value) {
+    return value === true || value === 1 || value === '1';
+  }
+
+  function normalizeUserId(value) {
+    var parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      return null;
+    }
+    return String(parsed);
+  }
+
   OneSignal.push(function() {
     OneSignal.init({
       appId: WCOF_PUSH.appId,
@@ -38,10 +50,23 @@
       allowLocalhostAsSecureOrigin: true,
       notifyButton: { enable: false }
     });
-    if(WCOF_PUSH.isAdmin){ OneSignal.sendTag('wcof_role','admin'); }
-    else if(WCOF_PUSH.isRider){ OneSignal.sendTag('wcof_role','rider'); }
-    else { OneSignal.sendTag('wcof_role','user'); }
-    if(WCOF_PUSH.userId){ OneSignal.setExternalUserId(String(WCOF_PUSH.userId)); }
+
+    var isAdmin = flagIsTrue(WCOF_PUSH.isAdmin);
+    var isRider = flagIsTrue(WCOF_PUSH.isRider);
+    var role = 'user';
+
+    if (isAdmin) {
+      role = 'admin';
+    } else if (isRider) {
+      role = 'rider';
+    }
+
+    OneSignal.sendTag('wcof_role', role);
+
+    var externalId = normalizeUserId(WCOF_PUSH.userId);
+    if (externalId) {
+      OneSignal.setExternalUserId(externalId);
+    }
   });
 
   // automatic prompt on first click, but we also provide a manual button
