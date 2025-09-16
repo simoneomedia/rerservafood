@@ -118,8 +118,10 @@ final class WCOF_Plugin {
         add_action('admin_init', [$this,'register_settings']);
         add_action('admin_init', [$this,'maybe_redirect_setup']);
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
+        add_action('wp_enqueue_scripts', [$this,'ensure_interactivity_module'], 5);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
+        add_action('admin_enqueue_scripts', [$this,'ensure_interactivity_module'], 5);
         add_filter('woocommerce_shipping_methods', [$this,'register_shipping_method']);
         add_action('admin_enqueue_scripts', [$this,'admin_scripts']);
 
@@ -1780,6 +1782,22 @@ exit;
         }
         fclose($out);
         exit;
+    }
+
+    public function ensure_interactivity_module(){
+        if( !function_exists('wp_enqueue_script') ) return;
+
+        if( function_exists('wp_script_is') && wp_script_is('wp-interactivity', 'registered') ){
+            wp_enqueue_script('wp-interactivity');
+            return;
+        }
+
+        if( function_exists('wp_scripts') ){
+            $scripts = wp_scripts();
+            if( $scripts && isset($scripts->registered['wp-interactivity']) ){
+                wp_enqueue_script('wp-interactivity');
+            }
+        }
     }
 
     /* ===== OneSignal init + push senders ===== */
