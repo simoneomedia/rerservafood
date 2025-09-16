@@ -55,6 +55,7 @@
 
   if(btn){
     btn.addEventListener('click', function(){
+      console.log('[OneSignal] Push button clicked; queuing subscription check.');
       OneSignal.push(function(){
         OneSignal.isPushNotificationsEnabled(function(enabled){
           if(enabled){
