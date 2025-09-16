@@ -23,7 +23,7 @@
       appId: WCOF_PUSH.appId,
       serviceWorkerParam: { scope: '/' },
       serviceWorkerPath: '/OneSignalSDKWorker.js',
-      serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js',
+      serviceWorkerUpdaterPath: '/UpdaterWorker.js',
       allowLocalhostAsSecureOrigin: true,
       notifyButton: { enable: false }
     });
