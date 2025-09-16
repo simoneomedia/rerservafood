@@ -16,7 +16,18 @@
   var s = document.createElement('script');
   s.src = 'https://cdn.onesignal.com/sdks/OneSignalSDK.js';
   s.async = true;
-  document.head.appendChild(s);
+  try {
+    document.head.appendChild(s);
+    console.log('[OneSignal] SDK script tag appended to <head>.');
+  } catch (error) {
+    console.error('[OneSignal] Failed to append SDK script tag to <head>.', error);
+  }
+  s.addEventListener('load', function(){
+    console.log('[OneSignal] SDK script loaded successfully.');
+  });
+  s.addEventListener('error', function(event){
+    console.error('[OneSignal] SDK script failed to load.', event);
+  });
 
   OneSignal.push(function() {
     OneSignal.init({
