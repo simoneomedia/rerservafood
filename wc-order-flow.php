@@ -2174,7 +2174,6 @@ exit;
         <?php return ob_get_clean();
     }
     public function shortcode_push_debug($atts=[]){
-        if(!current_user_can('manage_woocommerce')) return '';
         if( !$this->is_license_valid() ) return '<em>License invalid.</em>';
         if( empty($this->settings()['enable']) ) return '<em>Enable push in settings first.</em>';
         wp_enqueue_script('wcof-push-debug', plugins_url('assets/push-debug.js', __FILE__), [], '1.9.0', true);
