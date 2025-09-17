@@ -33,6 +33,13 @@
     return value === true || value === 1 || value === '1';
   }
 
+  function stringOrDefault(value, fallback) {
+    if (typeof value === 'string' && value) {
+      return value;
+    }
+    return fallback;
+  }
+
   function normalizeUserId(value) {
     var parsed = parseInt(value, 10);
     if (isNaN(parsed) || parsed <= 0) {
@@ -65,12 +72,16 @@
   }
   window.wcofRequestPushPermission = requestPushPermission;
 
+  var serviceWorkerScope = stringOrDefault(WCOF_PUSH.swScope, '/');
+  var serviceWorkerPath = stringOrDefault(WCOF_PUSH.swWorkerPath, '/OneSignalSDKWorker.js');
+  var serviceWorkerUpdaterPath = stringOrDefault(WCOF_PUSH.swUpdaterPath, '/OneSignalSDKUpdaterWorker.js');
+
   OneSignal.push(function() {
     OneSignal.init({
       appId: WCOF_PUSH.appId,
-      serviceWorkerParam: { scope: '/' },
-      serviceWorkerPath: '/OneSignalSDKWorker.js',
-      serviceWorkerUpdaterPath: '/OneSignalSDKUpdaterWorker.js',
+      serviceWorkerParam: { scope: serviceWorkerScope },
+      serviceWorkerPath: serviceWorkerPath,
+      serviceWorkerUpdaterPath: serviceWorkerUpdaterPath,
       allowLocalhostAsSecureOrigin: true,
       notifyButton: { enable: false }
     });
