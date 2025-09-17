@@ -1802,12 +1802,26 @@ exit;
         if( !$this->is_license_valid() ) return;
         $s = $this->settings();
         if( empty($s['enable']) || empty($s['app_id']) ) return;
+        $public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
+        if (!is_string($public_path) || $public_path === '') {
+            $public_path = '/';
+        } else {
+            $public_path = '/' . ltrim($public_path, '/');
+            $public_path = trailingslashit($public_path);
+        }
+        if ($public_path === '') {
+            $public_path = '/';
+        }
+
         wp_enqueue_script('wcof-onesignal', plugins_url('assets/onesignal-init.js', __FILE__), [], '1.9.0', true);
         wp_localize_script('wcof-onesignal', 'WCOF_PUSH', [
-            'appId'   => $s['app_id'],
-            'userId'  => get_current_user_id(),
-            'isAdmin' => current_user_can('manage_woocommerce') ? 1 : 0,
-            'isRider' => current_user_can('wcof_rider') ? 1 : 0,
+            'appId'           => $s['app_id'],
+            'userId'          => get_current_user_id(),
+            'isAdmin'         => current_user_can('manage_woocommerce') ? 1 : 0,
+            'isRider'         => current_user_can('wcof_rider') ? 1 : 0,
+            'swScope'         => $public_path,
+            'swWorkerPath'    => $public_path . 'OneSignalSDKWorker.js',
+            'swUpdaterPath'   => $public_path . 'OneSignalSDKUpdaterWorker.js',
         ]);
     }
 
