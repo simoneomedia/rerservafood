@@ -41,6 +41,30 @@
     return String(parsed);
   }
 
+  function requestPushPermission(){
+    try {
+      var api = window.OneSignal || null;
+      if (api && api.Notifications && typeof api.Notifications.requestPermission === 'function') {
+        api.Notifications.requestPermission(true);
+        return;
+      }
+      if (api && api.Slidedown && typeof api.Slidedown.promptPush === 'function') {
+        api.Slidedown.promptPush();
+        return;
+      }
+      if (api && typeof api.showSlidedownPrompt === 'function') {
+        api.showSlidedownPrompt();
+        return;
+      }
+      if (api && typeof api.registerForPushNotifications === 'function') {
+        api.registerForPushNotifications({ modalPrompt: true });
+      }
+    } catch (error) {
+      console.error('[OneSignal] Failed to request push permission.', error);
+    }
+  }
+  window.wcofRequestPushPermission = requestPushPermission;
+
   OneSignal.push(function() {
     OneSignal.init({
       appId: WCOF_PUSH.appId,
@@ -71,7 +95,7 @@
 
   // automatic prompt on first click, but we also provide a manual button
   document.addEventListener('click', function once(){
-    OneSignal.push(function(){ OneSignal.showSlidedownPrompt(); });
+    OneSignal.push(requestPushPermission);
     document.removeEventListener('click', once);
   });
 })();
