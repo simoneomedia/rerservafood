@@ -177,6 +177,17 @@ $cdn   = ($which === 'updater')
     ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
     : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
 
+$public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
+if (!is_string($public_path) || $public_path === '') {
+    $public_path = '/';
+} else {
+    $public_path = '/' . ltrim($public_path, '/');
+    $public_path = trailingslashit($public_path);
+}
+if ($public_path === '') {
+    $public_path = '/';
+}
+
 if(function_exists('status_header')){
     status_header(200);
 } else {
@@ -185,7 +196,7 @@ if(function_exists('status_header')){
 
 header('Content-Type: application/javascript; charset=utf-8');
 if($which === 'worker'){
-    header('Service-Worker-Allowed: /');
+    header('Service-Worker-Allowed: ' . $public_path);
 }
 header('Cache-Control: public, max-age=3600');
 header('X-Content-Type-Options: nosniff');
