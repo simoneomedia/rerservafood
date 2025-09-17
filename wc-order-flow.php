@@ -168,51 +168,66 @@ public function add_query_vars($vars){
 $vars[]='wcof_sw';
 return $vars;
 }
-public function maybe_serve_sw(){
-$which = get_query_var('wcof_sw');
-if(!$which) return;
+    public function maybe_serve_sw(){
+        $which = get_query_var('wcof_sw');
 
-$which = ($which === 'updater') ? 'updater' : 'worker';
-$cdn   = ($which === 'updater')
-    ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
-    : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
+        if(!$which){
+            $request_uri = isset($_SERVER['REQUEST_URI']) ? wp_unslash((string) $_SERVER['REQUEST_URI']) : '';
+            $path        = $request_uri ? wp_parse_url($request_uri, PHP_URL_PATH) : '';
+            $basename    = is_string($path) ? basename($path) : '';
 
-$public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
-if (!is_string($public_path) || $public_path === '') {
-    $public_path = '/';
-} else {
-    $public_path = '/' . ltrim($public_path, '/');
-    $public_path = trailingslashit($public_path);
-}
-if ($public_path === '') {
-    $public_path = '/';
-}
+            if($basename === 'OneSignalSDKWorker.js'){
+                $which = 'worker';
+            } elseif($basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js'){
+                $which = 'updater';
+            }
+        }
 
-if(function_exists('status_header')){
-    status_header(200);
-} else {
-    http_response_code(200);
-}
+        if(!$which) return;
 
-header('Content-Type: application/javascript; charset=utf-8');
-if($which === 'worker'){
-    header('Service-Worker-Allowed: ' . $public_path);
-}
-header('Cache-Control: public, max-age=3600');
-header('X-Content-Type-Options: nosniff');
-header('X-Robots-Tag: noindex');
+        $which = ($which === 'updater') ? 'updater' : 'worker';
+        $cdn   = ($which === 'updater')
+            ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
+            : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
 
-if(!isset($_SERVER['REQUEST_METHOD']) || strtoupper($_SERVER['REQUEST_METHOD']) !== 'HEAD'){
-    echo "importScripts('$cdn');\n";
-}
-exit;
-}
+        $public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
+        if (!is_string($public_path) || $public_path === '') {
+            $public_path = '/';
+        } else {
+            $public_path = '/' . ltrim($public_path, '/');
+            $public_path = trailingslashit($public_path);
+        }
+        if ($public_path === '') {
+            $public_path = '/';
+        }
+
+        if(function_exists('status_header')){
+            status_header(200);
+        } else {
+            http_response_code(200);
+        }
+
+        header('Content-Type: application/javascript; charset=utf-8');
+        if($which === 'worker'){
+            header('Service-Worker-Allowed: ' . $public_path);
+        }
+        header('Cache-Control: public, max-age=3600');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Robots-Tag: noindex');
+
+        if(!isset($_SERVER['REQUEST_METHOD']) || strtoupper($_SERVER['REQUEST_METHOD']) !== 'HEAD'){
+            echo "importScripts('$cdn');\n";
+        }
+        exit;
+    }
 
     /* Avoid any 301/302 on SW files — redirects break registration */
     public function prevent_sw_canonical($redirect_url, $requested){
         if (isset($_GET['wcof_sw'])) return false;
         $path = wp_parse_url($requested, PHP_URL_PATH);
+        $basename = is_string($path) ? basename($path) : '';
         if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js') return false;
+        if ($basename === 'OneSignalSDKWorker.js' || $basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js') return false;
         return $redirect_url;
     }
 
