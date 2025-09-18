@@ -13,6 +13,8 @@
     cooldownHours = 168;
   }
   var cooldownMs = cooldownHours * 60 * 60 * 1000;
+  var workerUrl = typeof settings.workerUrl === 'string' && settings.workerUrl ? settings.workerUrl : '/wcof-pwa-worker.js';
+  var workerScope = typeof settings.workerScope === 'string' && settings.workerScope ? settings.workerScope : '/';
 
   var canUseStorage = false;
   try {
@@ -41,6 +43,7 @@
   var dismissButton = null;
   var messageElement = null;
   var isReady = false;
+  var hasInitialized = false;
   var userAgent = (window.navigator && window.navigator.userAgent) ? window.navigator.userAgent.toLowerCase() : '';
   var isIos = /iphone|ipad|ipod/.test(userAgent);
 
@@ -104,13 +107,6 @@
     }
     showBanner();
   }
-
-  window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-  window.addEventListener('appinstalled', function () {
-    rememberDismissal();
-    hideBanner();
-  });
 
   function showIosBanner() {
     if (!isIos) {
@@ -180,17 +176,64 @@
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setup);
-  } else {
-    setup();
+  function initializeAfterServiceWorker() {
+    if (hasInitialized) {
+      return;
+    }
+    hasInitialized = true;
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    window.addEventListener('appinstalled', function () {
+      rememberDismissal();
+      hideBanner();
+    });
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setup);
+    } else {
+      setup();
+    }
+
+    if (isIos) {
+      window.setTimeout(function () {
+        if (!promptEvent && isReady) {
+          showIosBanner();
+        }
+      }, 1500);
+    }
   }
 
-  if (isIos) {
-    window.setTimeout(function () {
-      if (!promptEvent && isReady) {
-        showIosBanner();
-      }
-    }, 1500);
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) {
+      initializeAfterServiceWorker();
+      return;
+    }
+
+    var hostname = window.location && window.location.hostname ? window.location.hostname : '';
+    var isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+    if (window.isSecureContext === false && !isLocalhost) {
+      initializeAfterServiceWorker();
+      return;
+    }
+
+    var options = {};
+    if (typeof workerScope === 'string' && workerScope) {
+      options.scope = workerScope;
+    }
+
+    try {
+      navigator.serviceWorker.register(workerUrl, options).then(function () {
+        initializeAfterServiceWorker();
+      }).catch(function (error) {
+        console.error('[WCOF PWA] Failed to register service worker.', error);
+        initializeAfterServiceWorker();
+      });
+    } catch (error) {
+      console.error('[WCOF PWA] Service worker registration threw an error.', error);
+      initializeAfterServiceWorker();
+    }
   }
+
+  registerServiceWorker();
 })();
