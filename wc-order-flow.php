@@ -144,6 +144,7 @@ final class WCOF_Plugin {
         add_filter('query_vars', [$this,'add_query_vars']);
         add_action('template_redirect', [$this,'maybe_serve_sw']);
         add_filter('redirect_canonical', [$this,'prevent_sw_canonical'], 10, 2);
+        add_filter('web_app_manifest', [$this,'pwa_manifest_icons']);
         add_action('update_option_' . self::OPTION_KEY, [$this,'maybe_flush_sw_rewrite'], 10, 2);
         add_action('admin_init', [$this,'maybe_force_sw_rewrite_flush']);
 
@@ -229,6 +230,110 @@ return $vars;
         if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js') return false;
         if ($basename === 'OneSignalSDKWorker.js' || $basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js') return false;
         return $redirect_url;
+    }
+
+    public function pwa_manifest_icons($manifest){
+        if(!is_array($manifest)){
+            $manifest = [];
+        }
+
+        $icons = [];
+        $existing = [];
+
+        if(!empty($manifest['icons']) && is_array($manifest['icons'])){
+            foreach($manifest['icons'] as $icon){
+                if(!is_array($icon) || empty($icon['src'])) continue;
+
+                $icons[] = $icon;
+
+                if(empty($icon['sizes'])) continue;
+                $declared = preg_split('/\s+/', (string) $icon['sizes']);
+                foreach((array) $declared as $size){
+                    if(preg_match('/^(\d+)x\1$/', (string) $size, $m)){
+                        $existing[(int) $m[1]] = true;
+                    }
+                }
+            }
+        }
+
+        foreach([192, 512] as $target){
+            if(isset($existing[$target])) continue;
+
+            $src = '';
+            $type = '';
+
+            if(function_exists('get_site_icon_url')){
+                $src = get_site_icon_url($target);
+            }
+
+            if($src){
+                $type = $this->manifest_icon_mime_from_url($src);
+            } else {
+                $src  = $this->fallback_manifest_icon_data_uri();
+                $type = 'image/svg+xml';
+            }
+
+            if(!$src) continue;
+
+            $icon = [
+                'src'   => $src,
+                'sizes' => $target . 'x' . $target,
+                'type'  => $type ?: 'image/png',
+            ];
+
+            if(strpos($src, 'data:image/svg+xml') === 0){
+                $icon['purpose'] = 'any maskable';
+            }
+
+            $icons[] = $icon;
+            $existing[$target] = true;
+        }
+
+        if(!empty($icons)){
+            $manifest['icons'] = array_values($icons);
+        } else {
+            unset($manifest['icons']);
+        }
+
+        return $manifest;
+    }
+
+    private function fallback_manifest_icon_data_uri(){
+        static $data_uri = null;
+        if($data_uri !== null) return $data_uri;
+
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#111827"/><circle cx="64" cy="64" r="36" fill="#6cf0c2"/><path fill="none" stroke="#0f172a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" d="M50 66l11 11 20-28"/><circle cx="44" cy="44" r="6" fill="#e2e8f0"/></svg>';
+        $data_uri = 'data:image/svg+xml;charset=UTF-8,' . rawurlencode($svg);
+        return $data_uri;
+    }
+
+    private function manifest_icon_mime_from_url($url){
+        if(!is_string($url) || $url === ''){
+            return 'image/png';
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+        if(!is_string($path) || $path === ''){
+            $path = $url;
+        }
+
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        switch($ext){
+            case 'svg':
+                return 'image/svg+xml';
+            case 'jpg':
+            case 'jpeg':
+                return 'image/jpeg';
+            case 'gif':
+                return 'image/gif';
+            case 'webp':
+                return 'image/webp';
+            case 'ico':
+            case 'cur':
+                return 'image/x-icon';
+        }
+
+        return 'image/png';
     }
 
     // Flush rewrite rules when push is enabled to ensure SW scripts load
