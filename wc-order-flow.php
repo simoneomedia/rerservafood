@@ -21,7 +21,7 @@ final class WCOF_Plugin {
     const META_LOCK    = '_wcof_lock';
     const STATUS_AWAITING = 'wc-on-hold';
     const STATUS_OUT_FOR_DELIVERY = 'wc-out-for-delivery';
-    const SW_REWRITE_VERSION = 2;
+    const SW_REWRITE_VERSION = 3;
 
     public static function activate(){
         $self = new self();
@@ -119,8 +119,11 @@ final class WCOF_Plugin {
         add_action('admin_init', [$this,'maybe_redirect_setup']);
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'ensure_interactivity_module'], 5);
+        add_action('wp_enqueue_scripts', [$this,'maybe_enqueue_pwa_assets']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
+        add_action('wp_head',          [$this,'maybe_output_pwa_meta'], 5);
+        add_action('wp_footer',        [$this,'render_pwa_install_prompt']);
         add_action('admin_enqueue_scripts', [$this,'ensure_interactivity_module'], 5);
         add_filter('woocommerce_shipping_methods', [$this,'register_shipping_method']);
         add_action('admin_enqueue_scripts', [$this,'admin_scripts']);
@@ -144,7 +147,7 @@ final class WCOF_Plugin {
         add_filter('query_vars', [$this,'add_query_vars']);
         add_action('template_redirect', [$this,'maybe_serve_sw']);
         add_filter('redirect_canonical', [$this,'prevent_sw_canonical'], 10, 2);
-        add_filter('web_app_manifest', [$this,'pwa_manifest_icons']);
+        add_filter('web_app_manifest', [$this,'filter_web_app_manifest']);
         add_action('update_option_' . self::OPTION_KEY, [$this,'maybe_flush_sw_rewrite'], 10, 2);
         add_action('admin_init', [$this,'maybe_force_sw_rewrite_flush']);
 
@@ -164,6 +167,7 @@ public function register_sw_rewrite(){
 add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?wcof_sw=worker', 'top');
 add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
 add_rewrite_rule('^UpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
+add_rewrite_rule('^wcof-pwa-sw\.js$', 'index.php?wcof_sw=pwa', 'top');
 }
 public function add_query_vars($vars){
 $vars[]='wcof_sw';
@@ -181,10 +185,17 @@ return $vars;
                 $which = 'worker';
             } elseif($basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js'){
                 $which = 'updater';
+            } elseif($basename === 'wcof-pwa-sw.js'){
+                $which = 'pwa';
             }
         }
 
         if(!$which) return;
+
+        if($which === 'pwa'){
+            $this->serve_pwa_service_worker();
+            return;
+        }
 
         $which = ($which === 'updater') ? 'updater' : 'worker';
         $cdn   = ($which === 'updater')
@@ -222,19 +233,195 @@ return $vars;
         exit;
     }
 
+    private function serve_pwa_service_worker(){
+        $public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
+        if (!is_string($public_path) || $public_path === '') {
+            $public_path = '/';
+        } else {
+            $public_path = '/' . ltrim($public_path, '/');
+            $public_path = trailingslashit($public_path);
+        }
+        if ($public_path === '') {
+            $public_path = '/';
+        }
+
+        if(function_exists('status_header')){
+            status_header(200);
+        } else {
+            http_response_code(200);
+        }
+
+        header('Content-Type: application/javascript; charset=utf-8');
+        header('Service-Worker-Allowed: ' . $public_path);
+        header('Cache-Control: no-cache, must-revalidate');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Robots-Tag: noindex');
+
+        if(isset($_SERVER['REQUEST_METHOD']) && strtoupper($_SERVER['REQUEST_METHOD']) === 'HEAD'){
+            exit;
+        }
+
+        $cache_prefix = wp_json_encode('wcof-pwa-static-');
+
+        if(!$this->is_pwa_enabled()){
+            echo 'const WCOF_CACHE_PREFIX = ' . $cache_prefix . ";\n";
+            echo "self.addEventListener('install', function(event){\n";
+            echo "  self.skipWaiting();\n";
+            echo "});\n";
+            echo "self.addEventListener('activate', function(event){\n";
+            echo "  event.waitUntil(\n";
+            echo "    caches.keys().then(function(keys){\n";
+            echo "      return Promise.all(keys.filter(function(key){\n";
+            echo "        return key.indexOf(WCOF_CACHE_PREFIX) === 0;\n";
+            echo "      }).map(function(key){\n";
+            echo "        return caches.delete(key);\n";
+            echo "      }));\n";
+            echo "    }).then(function(){\n";
+            echo "      if (self.registration && typeof self.registration.unregister === 'function') {\n";
+            echo "        return self.registration.unregister();\n";
+            echo "      }\n";
+            echo "      return undefined;\n";
+            echo "    })\n";
+            echo "  );\n";
+            echo "});\n";
+            exit;
+        }
+
+        $cache_name   = wp_json_encode('wcof-pwa-static-v' . self::SW_REWRITE_VERSION);
+
+        echo 'const WCOF_CACHE_NAME = ' . $cache_name . ";\n";
+        echo 'const WCOF_CACHE_PREFIX = ' . $cache_prefix . ";\n";
+        echo "function wcofFallbackUrl(){\n";
+        echo "  try {\n";
+        echo "    var scopeUrl = new URL('.', self.location.href);\n";
+        echo "    var path = scopeUrl.pathname || '/';\n";
+        echo "    if (path.slice(-1) !== '/') {\n";
+        echo "      path += '/';\n";
+        echo "    }\n";
+        echo "    return path;\n";
+        echo "  } catch (error) {\n";
+        echo "    var path = (self.location && self.location.pathname) ? self.location.pathname : '/';\n";
+        echo "    if (path.slice(-1) === '/') {\n";
+        echo "      return path;\n";
+        echo "    }\n";
+        echo "    var index = path.lastIndexOf('/');\n";
+        echo "    if (index === -1) {\n";
+        echo "      return '/';\n";
+        echo "    }\n";
+        echo "    return path.slice(0, index + 1);\n";
+        echo "  }\n";
+        echo "}\n";
+        echo "self.addEventListener('install', function(event){\n";
+        echo "  self.skipWaiting();\n";
+        echo "  event.waitUntil(\n";
+        echo "    caches.open(WCOF_CACHE_NAME).then(function(cache){\n";
+        echo "      var fallback = wcofFallbackUrl();\n";
+        echo "      if (!fallback) {\n";
+        echo "        return;\n";
+        echo "      }\n";
+        echo "      return cache.addAll([fallback]).catch(function(){});\n";
+        echo "    }).catch(function(){})\n";
+        echo "  );\n";
+        echo "});\n";
+        echo "self.addEventListener('activate', function(event){\n";
+        echo "  event.waitUntil(\n";
+        echo "    caches.keys().then(function(keys){\n";
+        echo "      return Promise.all(keys.filter(function(key){\n";
+        echo "        return key.indexOf(WCOF_CACHE_PREFIX) === 0 && key !== WCOF_CACHE_NAME;\n";
+        echo "      }).map(function(key){\n";
+        echo "        return caches.delete(key);\n";
+        echo "      }));\n";
+        echo "    }).then(function(){\n";
+        echo "      return self.clients.claim();\n";
+        echo "    })\n";
+        echo "  );\n";
+        echo "});\n";
+        echo "self.addEventListener('fetch', function(event){\n";
+        echo "  var request = event.request;\n";
+        echo "  if (!request || request.method !== 'GET') {\n";
+        echo "    return;\n";
+        echo "  }\n";
+        echo "  if (request.cache === 'only-if-cached' && request.mode !== 'same-origin') {\n";
+        echo "    return;\n";
+        echo "  }\n";
+        echo "  if (request.mode !== 'navigate') {\n";
+        echo "    return;\n";
+        echo "  }\n";
+        echo "  event.respondWith(\n";
+        echo "    fetch(request).then(function(response){\n";
+        echo "      if (response && response.status === 200) {\n";
+        echo "        var copy = response.clone();\n";
+        echo "        caches.open(WCOF_CACHE_NAME).then(function(cache){\n";
+        echo "          cache.put(request, copy).catch(function(){});\n";
+        echo "        }).catch(function(){});\n";
+        echo "      }\n";
+        echo "      return response;\n";
+        echo "    }).catch(function(){\n";
+        echo "      return caches.match(request).then(function(match){\n";
+        echo "        if (match) {\n";
+        echo "          return match;\n";
+        echo "        }\n";
+        echo "        return caches.match(wcofFallbackUrl());\n";
+        echo "      }).then(function(response){\n";
+        echo "        if (response) {\n";
+        echo "          return response;\n";
+        echo "        }\n";
+        echo "        return new Response('', { status: 503, statusText: 'Service Unavailable' });\n";
+        echo "      });\n";
+        echo "    })\n";
+        echo "  );\n";
+        echo "});\n";
+        exit;
+    }
+
     /* Avoid any 301/302 on SW files — redirects break registration */
     public function prevent_sw_canonical($redirect_url, $requested){
         if (isset($_GET['wcof_sw'])) return false;
         $path = wp_parse_url($requested, PHP_URL_PATH);
         $basename = is_string($path) ? basename($path) : '';
-        if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js') return false;
-        if ($basename === 'OneSignalSDKWorker.js' || $basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js') return false;
+        if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js' || $path === '/wcof-pwa-sw.js') return false;
+        if ($basename === 'OneSignalSDKWorker.js' || $basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js' || $basename === 'wcof-pwa-sw.js') return false;
         return $redirect_url;
     }
 
-    public function pwa_manifest_icons($manifest){
-        if(!is_array($manifest)){
-            $manifest = [];
+    public function filter_web_app_manifest($manifest){
+        $manifest = is_array($manifest) ? $manifest : [];
+
+        if(!$this->is_pwa_enabled()){
+            return $manifest;
+        }
+
+        $site_name = wp_strip_all_tags(get_bloginfo('name', 'display'));
+        if($site_name === ''){
+            $site_name = 'ReeservaFood';
+        }
+
+        $short_name = $site_name;
+        $length_callback = function_exists('mb_strlen') ? 'mb_strlen' : 'strlen';
+        $substr_callback = function_exists('mb_substr') ? 'mb_substr' : 'substr';
+        if($length_callback($short_name) > 12){
+            $short_name = $substr_callback($short_name, 0, 12);
+        }
+
+        $home = trailingslashit(home_url());
+        $manifest['name'] = $site_name;
+        $manifest['short_name'] = $short_name;
+        $manifest['start_url'] = $home;
+        $manifest['scope'] = $home;
+        $manifest['display'] = 'standalone';
+        $manifest['theme_color'] = '#3b82f6';
+        $manifest['background_color'] = '#ffffff';
+        if(empty($manifest['id'])){
+            $manifest['id'] = $home;
+        }
+
+        if(function_exists('determine_locale')){
+            $manifest['lang'] = determine_locale();
+        }
+
+        $tagline = wp_strip_all_tags(get_bloginfo('description', 'display'));
+        if($tagline !== ''){
+            $manifest['description'] = $tagline;
         }
 
         $icons = [];
@@ -1251,6 +1438,7 @@ return $vars;
             <p><label><?php esc_html_e('Usual waiting time (min – max minutes)', 'wc-order-flow'); ?> <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_min]" value="<?php echo esc_attr($s['wait_min']); ?>" style="width:80px"/> – <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_max]" value="<?php echo esc_attr($s['wait_max']); ?>" style="width:80px"/></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Store closed', 'wc-order-flow'); ?></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></label></p>
+            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_enable]" value="1" <?php checked($s['pwa_enable'],1); ?>/> <?php esc_html_e('Show the install app banner to customers', 'wc-order-flow'); ?></label></p>
             <p><button type="submit"><?php esc_html_e('Save settings', 'wc-order-flow'); ?></button></p>
           </form>
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -1332,6 +1520,7 @@ return $vars;
             'close_time'=>isset($v['close_time'])?sanitize_text_field($v['close_time']):'',
             'store_closed'=>!empty($v['store_closed'])?1:0,
             'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0,
+            'pwa_enable'=>!empty($v['pwa_enable'])?1:0,
             'postal_codes'=>isset($v['postal_codes'])?sanitize_text_field($v['postal_codes']):'',
             'delivery_radius'=>isset($v['delivery_radius'])?floatval($v['delivery_radius']):0,
             'delivery_polygon'=>isset($v['delivery_polygon'])?wp_kses_post($v['delivery_polygon']):'',
@@ -1364,6 +1553,7 @@ return $vars;
             'enable'=>0,'app_id'=>'','rest_key'=>'','license_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
+            'pwa_enable'=>0,
             'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto',
             'wait_min'=>20,'wait_max'=>40
         ]);
@@ -1852,8 +2042,14 @@ return $vars;
               </td></tr>
               <tr><th scope="row"><?php esc_html_e('Opening time', 'wc-order-flow'); ?></th><td><input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[open_time]" value="<?php echo esc_attr($s['open_time']); ?>"/> – <input type="time" name="<?php echo esc_attr(self::OPTION_KEY); ?>[close_time]" value="<?php echo esc_attr($s['close_time']); ?>"/></td></tr>
               <tr><th scope="row"><?php esc_html_e('Usual waiting time (min – max minutes)', 'wc-order-flow'); ?></th><td><input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_min]" value="<?php echo esc_attr($s['wait_min']); ?>" style="width:80px"/> – <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_max]" value="<?php echo esc_attr($s['wait_max']); ?>" style="width:80px"/></td></tr>
-              <tr><th scope="row"><?php esc_html_e('Store closed', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
+            <tr><th scope="row"><?php esc_html_e('Store closed', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
             <tr><th scope="row"><?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
+            </table>
+            <h2><?php esc_html_e('Progressive Web App', 'wc-order-flow'); ?></h2>
+            <table class="form-table" role="presentation">
+              <tr><th scope="row"><?php esc_html_e('Install banner', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_enable]" value="1" <?php checked($s['pwa_enable'],1); ?>/> <?php esc_html_e('Allow customers to install the site as an app', 'wc-order-flow'); ?></label>
+                <p class="description"><?php esc_html_e('Adds app meta tags and shows an "Install App" prompt when supported.', 'wc-order-flow'); ?></p>
+              </td></tr>
             </table>
             <h2><?php esc_html_e('OneSignal', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
@@ -2042,6 +2238,98 @@ return $vars;
                 wp_enqueue_script('wp-interactivity');
             }
         }
+    }
+
+    private function is_pwa_enabled(){
+        $settings = $this->settings();
+        return !empty($settings['pwa_enable']);
+    }
+
+    public function maybe_enqueue_pwa_assets(){
+        if( is_admin() ) return;
+        if( !$this->is_pwa_enabled() ) return;
+        if( function_exists('wp_is_json_request') && wp_is_json_request() ) return;
+
+        wp_enqueue_script('wcof-pwa', plugins_url('assets/pwa.js', __FILE__), [], '1.1.0', true);
+        $sw_url = add_query_arg('ver', self::SW_REWRITE_VERSION, home_url('wcof-pwa-sw.js'));
+        wp_localize_script('wcof-pwa', 'WCOF_PWA', [
+            'dismissKey'    => 'wcofPwaDismissed',
+            'cooldownHours' => 168,
+            'swUrl'         => esc_url_raw($sw_url),
+            'strings'       => [
+                'installLabel' => esc_html__('Install App', 'wc-order-flow'),
+                'iosMessage'   => esc_html__('Install this app by tapping the share icon and then "Add to Home Screen".', 'wc-order-flow'),
+                'iosButton'    => esc_html__('Install App', 'wc-order-flow'),
+            ],
+        ]);
+    }
+
+    public function maybe_output_pwa_meta(){
+        if( is_admin() ) return;
+        if( !$this->is_pwa_enabled() ) return;
+        if( function_exists('wp_is_json_request') && wp_is_json_request() ) return;
+
+        $theme_color = '#3b82f6';
+        $site_name = wp_strip_all_tags(get_bloginfo('name', 'display'));
+        if($site_name === ''){
+            $site_name = 'ReeservaFood';
+        }
+
+        $manifest_url = '';
+        if(function_exists('wp_get_web_app_manifest_url')){
+            $manifest_url = wp_get_web_app_manifest_url();
+        }
+        if(!$manifest_url && function_exists('rest_url')){
+            $manifest_url = rest_url('wp/v2/web-app-manifest');
+        }
+
+        echo "\n<!-- ReeservaFood PWA -->\n";
+        echo '<meta name="theme-color" content="'.esc_attr($theme_color).'" />' . "\n";
+        echo '<meta name="mobile-web-app-capable" content="yes" />' . "\n";
+        echo '<meta name="apple-mobile-web-app-capable" content="yes" />' . "\n";
+        echo '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />' . "\n";
+        echo '<meta name="apple-mobile-web-app-title" content="'.esc_attr($site_name).'" />' . "\n";
+        if($manifest_url){
+            echo '<link rel="manifest" href="'.esc_url($manifest_url).'" />' . "\n";
+        }
+
+        $css = <<<'CSS'
+.wcof-pwa-install{position:fixed;left:0;right:0;bottom:16px;z-index:9999;display:flex;justify-content:center;padding:0 16px;box-sizing:border-box;pointer-events:none;}
+.wcof-pwa-install[hidden]{display:none !important;}
+.wcof-pwa-install.is-visible{pointer-events:auto;}
+.wcof-pwa-install__inner{max-width:520px;width:100%;background:#0f172a;color:#fff;padding:16px 20px;border-radius:18px;box-shadow:0 20px 40px rgba(15,23,42,.35);display:flex;flex-direction:column;gap:12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+.wcof-pwa-install__text strong{display:block;font-size:1rem;line-height:1.4;}
+.wcof-pwa-install__text span{display:block;font-size:.9rem;line-height:1.4;color:rgba(255,255,255,.85);margin-top:4px;}
+.wcof-pwa-install__actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;}
+.wcof-pwa-install__actions button{cursor:pointer;font-size:.9rem;font-weight:600;border-radius:999px;padding:8px 18px;transition:background-color .2s ease,color .2s ease,border-color .2s ease;}
+.wcof-pwa-install__install{background:#3b82f6;border:1px solid #3b82f6;color:#fff;}
+.wcof-pwa-install__install:hover,.wcof-pwa-install__install:focus{background:#2563eb;border-color:#2563eb;}
+.wcof-pwa-install__dismiss{background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;}
+.wcof-pwa-install__dismiss:hover,.wcof-pwa-install__dismiss:focus{border-color:#fff;color:#fff;}
+@media (max-width:480px){.wcof-pwa-install{bottom:8px;padding:0 12px;}.wcof-pwa-install__inner{padding:14px 16px;}}
+CSS;
+
+        echo '<style id="wcof-pwa-style">'.$css.'</style>' . "\n";
+    }
+
+    public function render_pwa_install_prompt(){
+        if( is_admin() ) return;
+        if( !$this->is_pwa_enabled() ) return;
+        if( function_exists('wp_is_json_request') && wp_is_json_request() ) return;
+        ?>
+        <div id="wcof-pwa-install" class="wcof-pwa-install" role="dialog" aria-live="polite" aria-modal="false" hidden>
+          <div class="wcof-pwa-install__inner">
+            <div class="wcof-pwa-install__text">
+              <strong><?php esc_html_e('Install our app', 'wc-order-flow'); ?></strong>
+              <span data-wcof-pwa-message><?php esc_html_e('Install this app on your device for quick access and a fullscreen experience.', 'wc-order-flow'); ?></span>
+            </div>
+            <div class="wcof-pwa-install__actions">
+              <button type="button" class="wcof-pwa-install__dismiss" data-wcof-pwa-dismiss><?php esc_html_e('Maybe later', 'wc-order-flow'); ?></button>
+              <button type="button" class="wcof-pwa-install__install" data-wcof-pwa-install><?php esc_html_e('Install App', 'wc-order-flow'); ?></button>
+            </div>
+          </div>
+        </div>
+        <?php
     }
 
     /* ===== OneSignal init + push senders ===== */
