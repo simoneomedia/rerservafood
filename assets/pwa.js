@@ -13,8 +13,14 @@
     cooldownHours = 168;
   }
   var cooldownMs = cooldownHours * 60 * 60 * 1000;
-  var workerUrl = typeof settings.workerUrl === 'string' && settings.workerUrl ? settings.workerUrl : '/wcof-pwa-worker.js';
+  var rawWorkerUrl = typeof settings.workerUrl === 'string' && settings.workerUrl ? settings.workerUrl : '/wcof-navigation-worker.js';
   var workerScope = typeof settings.workerScope === 'string' && settings.workerScope ? settings.workerScope : '/';
+  if (typeof workerScope !== 'string' || !workerScope) {
+    workerScope = '/';
+  } else if (workerScope.charAt(0) !== '/') {
+    workerScope = '/' + workerScope;
+  }
+  var workerUrl = '';
 
   var canUseStorage = false;
   try {
@@ -44,6 +50,7 @@
   var messageElement = null;
   var isReady = false;
   var hasInitialized = false;
+  var hasAttemptedRegistration = false;
   var userAgent = (window.navigator && window.navigator.userAgent) ? window.navigator.userAgent.toLowerCase() : '';
   var isIos = /iphone|ipad|ipod/.test(userAgent);
 
@@ -56,6 +63,45 @@
     }
     return false;
   }
+
+  function resolveWorkerUrl(rawUrl) {
+    if (typeof rawUrl !== 'string' || !rawUrl) {
+      return '';
+    }
+
+    if (typeof URL === 'undefined') {
+      return rawUrl.charAt(0) === '/' ? rawUrl : '';
+    }
+
+    var origin = '';
+    if (window.location) {
+      if (window.location.origin) {
+        origin = window.location.origin;
+      } else if (window.location.protocol && window.location.host) {
+        origin = window.location.protocol + '//' + window.location.host;
+      }
+    }
+
+    var base = window.location && window.location.href ? window.location.href : origin;
+
+    try {
+      var parsed = new URL(rawUrl, base || origin);
+      if (origin && parsed.origin !== origin) {
+        if (window.console && typeof window.console.warn === 'function') {
+          window.console.warn('[WCOF PWA] Ignoring service worker URL with mismatched origin.', rawUrl);
+        }
+        return '';
+      }
+      return parsed.href;
+    } catch (error) {
+      if (window.console && typeof window.console.error === 'function') {
+        window.console.error('[WCOF PWA] Invalid service worker URL.', error);
+      }
+      return '';
+    }
+  }
+
+  workerUrl = resolveWorkerUrl(rawWorkerUrl);
 
   function rememberDismissal() {
     if (!canUseStorage) {
@@ -204,7 +250,23 @@
     }
   }
 
-  function registerServiceWorker() {
+  function startServiceWorkerRegistration() {
+    if (hasAttemptedRegistration) {
+      return;
+    }
+    if (window.removeEventListener) {
+      window.removeEventListener('load', startServiceWorkerRegistration);
+    }
+    hasAttemptedRegistration = true;
+
+    if (!workerUrl) {
+      if (rawWorkerUrl && window.console && typeof window.console.warn === 'function') {
+        window.console.warn('[WCOF PWA] Service worker URL is missing or invalid.', rawWorkerUrl);
+      }
+      initializeAfterServiceWorker();
+      return;
+    }
+
     if (!('serviceWorker' in navigator)) {
       initializeAfterServiceWorker();
       return;
@@ -226,14 +288,22 @@
       navigator.serviceWorker.register(workerUrl, options).then(function () {
         initializeAfterServiceWorker();
       }).catch(function (error) {
-        console.error('[WCOF PWA] Failed to register service worker.', error);
+        if (window.console && typeof window.console.error === 'function') {
+          window.console.error('[WCOF PWA] Failed to register service worker.', error);
+        }
         initializeAfterServiceWorker();
       });
     } catch (error) {
-      console.error('[WCOF PWA] Service worker registration threw an error.', error);
+      if (window.console && typeof window.console.error === 'function') {
+        window.console.error('[WCOF PWA] Service worker registration threw an error.', error);
+      }
       initializeAfterServiceWorker();
     }
   }
 
-  registerServiceWorker();
+  if (document.readyState === 'complete') {
+    startServiceWorkerRegistration();
+  } else {
+    window.addEventListener('load', startServiceWorkerRegistration);
+  }
 })();
