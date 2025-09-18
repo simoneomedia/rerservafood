@@ -21,7 +21,7 @@ final class WCOF_Plugin {
     const META_LOCK    = '_wcof_lock';
     const STATUS_AWAITING = 'wc-on-hold';
     const STATUS_OUT_FOR_DELIVERY = 'wc-out-for-delivery';
-    const SW_REWRITE_VERSION = 2;
+    const SW_REWRITE_VERSION = 3;
 
     public static function activate(){
         $self = new self();
@@ -167,6 +167,7 @@ public function register_sw_rewrite(){
 add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?wcof_sw=worker', 'top');
 add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
 add_rewrite_rule('^UpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
+add_rewrite_rule('^wcof-pwa-worker\.js$', 'index.php?wcof_sw=pwa', 'top');
 }
 public function add_query_vars($vars){
 $vars[]='wcof_sw';
@@ -184,15 +185,14 @@ return $vars;
                 $which = 'worker';
             } elseif($basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js'){
                 $which = 'updater';
+            } elseif($basename === 'wcof-pwa-worker.js'){
+                $which = 'pwa';
             }
         }
 
         if(!$which) return;
 
-        $which = ($which === 'updater') ? 'updater' : 'worker';
-        $cdn   = ($which === 'updater')
-            ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
-            : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
+        $which = in_array($which, ['worker','updater','pwa'], true) ? $which : 'worker';
 
         $public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
         if (!is_string($public_path) || $public_path === '') {
@@ -212,7 +212,7 @@ return $vars;
         }
 
         header('Content-Type: application/javascript; charset=utf-8');
-        if($which === 'worker'){
+        if($which === 'worker' || $which === 'pwa'){
             header('Service-Worker-Allowed: ' . $public_path);
         }
         header('Cache-Control: public, max-age=3600');
@@ -220,7 +220,22 @@ return $vars;
         header('X-Robots-Tag: noindex');
 
         if(!isset($_SERVER['REQUEST_METHOD']) || strtoupper($_SERVER['REQUEST_METHOD']) !== 'HEAD'){
-            echo "importScripts('$cdn');\n";
+            if($which === 'pwa'){
+                $worker_path = plugin_dir_path(__FILE__) . 'assets/pwa-worker.js';
+                $contents = '';
+                if(is_readable($worker_path)){
+                    $contents = file_get_contents($worker_path);
+                }
+                if($contents === false || $contents === ''){
+                    $contents = "self.addEventListener('fetch',function(){});\n";
+                }
+                echo $contents;
+            } else {
+                $cdn = ($which === 'updater')
+                    ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
+                    : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
+                echo "importScripts('$cdn');\n";
+            }
         }
         exit;
     }
@@ -230,8 +245,8 @@ return $vars;
         if (isset($_GET['wcof_sw'])) return false;
         $path = wp_parse_url($requested, PHP_URL_PATH);
         $basename = is_string($path) ? basename($path) : '';
-        if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js') return false;
-        if ($basename === 'OneSignalSDKWorker.js' || $basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js') return false;
+        if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js' || $path === '/wcof-pwa-worker.js') return false;
+        if ($basename === 'OneSignalSDKWorker.js' || $basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js' || $basename === 'wcof-pwa-worker.js') return false;
         return $redirect_url;
     }
 
@@ -2101,10 +2116,25 @@ return $vars;
         if( !$this->is_pwa_enabled() ) return;
         if( function_exists('wp_is_json_request') && wp_is_json_request() ) return;
 
-        wp_enqueue_script('wcof-pwa', plugins_url('assets/pwa.js', __FILE__), [], '1.0.0', true);
+        $public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
+        if (!is_string($public_path) || $public_path === '') {
+            $public_path = '/';
+        } else {
+            $public_path = '/' . ltrim($public_path, '/');
+            $public_path = trailingslashit($public_path);
+        }
+        if ($public_path === '') {
+            $public_path = '/';
+        }
+
+        $worker_url = home_url('/wcof-pwa-worker.js');
+
+        wp_enqueue_script('wcof-pwa', plugins_url('assets/pwa.js', __FILE__), [], '1.1.0', true);
         wp_localize_script('wcof-pwa', 'WCOF_PWA', [
             'dismissKey'    => 'wcofPwaDismissed',
             'cooldownHours' => 168,
+            'workerUrl'     => esc_url_raw($worker_url),
+            'workerScope'   => $public_path,
             'strings'       => [
                 'installLabel' => esc_html__('Install App', 'wc-order-flow'),
                 'iosMessage'   => esc_html__('Install this app by tapping the share icon and then "Add to Home Screen".', 'wc-order-flow'),
