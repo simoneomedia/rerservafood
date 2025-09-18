@@ -21,7 +21,7 @@ final class WCOF_Plugin {
     const META_LOCK    = '_wcof_lock';
     const STATUS_AWAITING = 'wc-on-hold';
     const STATUS_OUT_FOR_DELIVERY = 'wc-out-for-delivery';
-    const SW_REWRITE_VERSION = 3;
+    const SW_REWRITE_VERSION = 4;
 
     public static function activate(){
         $self = new self();
@@ -168,6 +168,7 @@ add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?wcof_sw=worker', 'top');
 add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
 add_rewrite_rule('^UpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
 add_rewrite_rule('^wcof-pwa-worker\.js$', 'index.php?wcof_sw=pwa', 'top');
+add_rewrite_rule('^wcof-navigation-worker\.js$', 'index.php?wcof_sw=pwa', 'top');
 }
 public function add_query_vars($vars){
 $vars[]='wcof_sw';
@@ -185,7 +186,7 @@ return $vars;
                 $which = 'worker';
             } elseif($basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js'){
                 $which = 'updater';
-            } elseif($basename === 'wcof-pwa-worker.js'){
+            } elseif($basename === 'wcof-pwa-worker.js' || $basename === 'wcof-navigation-worker.js'){
                 $which = 'pwa';
             }
         }
@@ -215,21 +216,13 @@ return $vars;
         if($which === 'worker' || $which === 'pwa'){
             header('Service-Worker-Allowed: ' . $public_path);
         }
-        header('Cache-Control: public, max-age=3600');
+        header('Cache-Control: no-store, max-age=0, must-revalidate');
         header('X-Content-Type-Options: nosniff');
         header('X-Robots-Tag: noindex');
 
         if(!isset($_SERVER['REQUEST_METHOD']) || strtoupper($_SERVER['REQUEST_METHOD']) !== 'HEAD'){
             if($which === 'pwa'){
-                $worker_path = plugin_dir_path(__FILE__) . 'assets/pwa-worker.js';
-                $contents = '';
-                if(is_readable($worker_path)){
-                    $contents = file_get_contents($worker_path);
-                }
-                if($contents === false || $contents === ''){
-                    $contents = "self.addEventListener('fetch',function(){});\n";
-                }
-                echo $contents;
+                echo $this->render_pwa_worker_script();
             } else {
                 $cdn = ($which === 'updater')
                     ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
@@ -240,13 +233,111 @@ return $vars;
         exit;
     }
 
+    private function render_pwa_worker_script(){
+        $encode = function($value){
+            if(function_exists('wp_json_encode')){
+                $encoded = wp_json_encode($value);
+            } else {
+                $encoded = json_encode($value);
+            }
+            if(!is_string($encoded)){
+                $encoded = 'null';
+            }
+            return $encoded;
+        };
+
+        $cache_prefix = 'wcof-pwa-navigation-';
+
+        if(!$this->is_pwa_enabled()){
+            $template_path = plugin_dir_path(__FILE__) . 'assets/pwa-worker-disabled.js';
+            $template = '';
+            if(is_readable($template_path)){
+                $template = file_get_contents($template_path);
+            }
+            if(!is_string($template) || $template === ''){
+                $template = "const CACHE_PREFIX = __CACHE_PREFIX__;\nself.addEventListener('install', function(event){\n  self.skipWaiting();\n});\nself.addEventListener('activate', function(event){\n  event.waitUntil(\n    caches.keys().then(function(keys){\n      return Promise.all(\n        keys\n          .filter(function(key){\n            return key.startsWith(CACHE_PREFIX);\n          })\n          .map(function(key){\n            return caches.delete(key);\n          })\n      );\n    }).catch(function(){\n      return Promise.resolve();\n    }).then(function(){\n      if (self.registration && self.registration.unregister) {\n        return self.registration.unregister();\n      }\n      return true;\n    }).then(function(){\n      if (!self.clients || !self.clients.matchAll) {\n        return true;\n      }\n      return self.clients.matchAll({ type: 'window' }).then(function(clients){\n        if (!clients || !clients.length) {\n          return true;\n        }\n        var reloads = [];\n        for (var i = 0; i < clients.length; i++) {\n          var client = clients[i];\n          if (client && typeof client.navigate === 'function') {\n            reloads.push(client.navigate(client.url).catch(function(){}));\n          }\n        }\n        if (reloads.length) {\n          return Promise.all(reloads);\n        }\n        return true;\n      });\n    }).catch(function(){\n      return Promise.resolve();\n    })\n  );\n});\n";
+            }
+
+            return strtr($template, [
+                '__CACHE_PREFIX__' => $encode($cache_prefix),
+            ]);
+        }
+
+        $template_path = plugin_dir_path(__FILE__) . 'assets/pwa-worker.js';
+        $template = '';
+        if(is_readable($template_path)){
+            $template = file_get_contents($template_path);
+        }
+        if(!is_string($template) || $template === ''){
+            $template = "const CACHE_PREFIX = __CACHE_PREFIX__;\nconst CACHE_VERSION = __CACHE_VERSION__;\nconst CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;\nconst START_URL = __START_URL__;\nconst OFFLINE_HTML = __OFFLINE_HTML__;\nconst OFFLINE_RESPONSE = new Response(OFFLINE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });\nself.addEventListener('install', function(event){\n  event.waitUntil(\n    caches.open(CACHE_NAME).then(function(cache){\n      return cache.addAll([START_URL]).catch(function(){\n        return Promise.resolve();\n      });\n    }).catch(function(){\n      return Promise.resolve();\n    })\n  );\n  self.skipWaiting();\n});\nself.addEventListener('activate', function(event){\n  event.waitUntil(\n    caches.keys().then(function(keys){\n      return Promise.all(keys.filter(function(key){\n        return key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME;\n      }).map(function(key){\n        return caches.delete(key);\n      }));\n    }).catch(function(){\n      return Promise.resolve();\n    }).then(function(){\n      return self.clients.claim();\n    })\n  );\n});\nself.addEventListener('fetch', function(event){\n  var request = event.request;\n  if (!request || request.method !== 'GET') {\n    return;\n  }\n  var url;\n  try {\n    url = new URL(request.url);\n  } catch (error) {\n    return;\n  }\n  if (url.origin !== self.location.origin) {\n    return;\n  }\n  var accept = request.headers && request.headers.get ? request.headers.get('accept') || '' : '';\n  var isNavigation = request.mode === 'navigate' || accept.indexOf('text/html') !== -1;\n  if (!isNavigation) {\n    return;\n  }\n  event.respondWith(\n    fetch(request).then(function(response){\n      if (response && response.status === 200 && (response.type === 'basic' || response.type === 'default')) {\n        var cacheCopy = response.clone();\n        var startCopy = request.mode === 'navigate' ? response.clone() : null;\n        caches.open(CACHE_NAME).then(function(cache){\n          cache.put(request, cacheCopy).catch(function(){});\n          if (startCopy) {\n            cache.put(START_URL, startCopy).catch(function(){});\n          }\n        }).catch(function(){});\n      }\n      return response;\n    }).catch(function(){\n      return caches.match(request).then(function(match){\n        if (match) {\n          return match;\n        }\n        return caches.match(START_URL).then(function(fallback){\n          if (fallback) {\n            return fallback;\n          }\n          return OFFLINE_RESPONSE.clone();\n        });\n      });\n    })\n  );\n});\n";
+        }
+
+        $start_url = trailingslashit(home_url());
+        $site_name = wp_strip_all_tags(get_bloginfo('name', 'display'));
+        if($site_name === ''){
+            $site_name = 'ReeservaFood';
+        }
+
+        $locale = function_exists('determine_locale') ? determine_locale() : get_locale();
+        if(!is_string($locale) || $locale === ''){
+            $locale = 'en';
+        }
+
+        $lang_attr = preg_replace('/[^a-zA-Z0-9-]/', '', $locale);
+        if($lang_attr === ''){
+            $lang_attr = 'en';
+        }
+
+        $style = 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:48px 24px;background:#0f172a;color:#f8fafc;text-align:center;}main{max-width:460px;margin:0 auto;}h1{font-size:1.6rem;margin-bottom:0.75rem;}p{margin:0;font-size:1rem;line-height:1.5;}';
+
+        $offline_html = sprintf(
+            '<!DOCTYPE html><html lang="%1$s"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%2$s</title><style>%3$s</style></head><body><main><h1>%4$s</h1><p>%5$s</p></main></body></html>',
+            esc_attr($lang_attr),
+            esc_html($site_name),
+            $style,
+            esc_html__('You\'re offline', 'wc-order-flow'),
+            esc_html__('Check your connection and try again.', 'wc-order-flow')
+        );
+
+        return strtr($template, [
+            '__CACHE_PREFIX__' => $encode($cache_prefix),
+            '__CACHE_VERSION__' => $encode('v' . self::SW_REWRITE_VERSION),
+            '__START_URL__' => $encode($start_url),
+            '__OFFLINE_HTML__' => $encode($offline_html),
+        ]);
+    }
+
     /* Avoid any 301/302 on SW files — redirects break registration */
     public function prevent_sw_canonical($redirect_url, $requested){
         if (isset($_GET['wcof_sw'])) return false;
+
         $path = wp_parse_url($requested, PHP_URL_PATH);
         $basename = is_string($path) ? basename($path) : '';
-        if ($path === '/OneSignalSDKWorker.js' || $path === '/OneSignalSDKUpdaterWorker.js' || $path === '/UpdaterWorker.js' || $path === '/wcof-pwa-worker.js') return false;
-        if ($basename === 'OneSignalSDKWorker.js' || $basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js' || $basename === 'wcof-pwa-worker.js') return false;
+
+        $blocked_paths = [
+            '/OneSignalSDKWorker.js',
+            '/OneSignalSDKUpdaterWorker.js',
+            '/UpdaterWorker.js',
+            '/wcof-pwa-worker.js',
+            '/wcof-navigation-worker.js',
+        ];
+
+        if (is_string($path) && in_array($path, $blocked_paths, true)) {
+            return false;
+        }
+
+        $blocked_basenames = [
+            'OneSignalSDKWorker.js',
+            'OneSignalSDKUpdaterWorker.js',
+            'UpdaterWorker.js',
+            'wcof-pwa-worker.js',
+            'wcof-navigation-worker.js',
+        ];
+
+        if (in_array($basename, $blocked_basenames, true)) {
+            return false;
+        }
+
         return $redirect_url;
     }
 
@@ -509,7 +600,18 @@ return $vars;
     public function maybe_flush_sw_rewrite($old, $new){
         $old_enabled = !empty($old['enable']);
         $new_enabled = !empty($new['enable']);
+        $old_pwa_enabled = !empty($old['pwa_enable']);
+        $new_pwa_enabled = !empty($new['pwa_enable']);
+
+        $should_flush = false;
         if(!$old_enabled && $new_enabled){
+            $should_flush = true;
+        }
+        if(!$old_pwa_enabled && $new_pwa_enabled){
+            $should_flush = true;
+        }
+
+        if($should_flush){
             $this->register_sw_rewrite();
             flush_rewrite_rules();
         }
@@ -2127,9 +2229,10 @@ return $vars;
             $public_path = '/';
         }
 
-        $worker_url = home_url('/wcof-pwa-worker.js');
+        $worker_url = home_url('/wcof-navigation-worker.js');
+        $worker_url = add_query_arg('swv', self::SW_REWRITE_VERSION, $worker_url);
 
-        wp_enqueue_script('wcof-pwa', plugins_url('assets/pwa.js', __FILE__), [], '1.1.0', true);
+        wp_enqueue_script('wcof-pwa', plugins_url('assets/pwa.js', __FILE__), [], '1.2.0', true);
         wp_localize_script('wcof-pwa', 'WCOF_PWA', [
             'dismissKey'    => 'wcofPwaDismissed',
             'cooldownHours' => 168,
