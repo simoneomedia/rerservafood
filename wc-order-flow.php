@@ -198,6 +198,26 @@ return $vars;
             $public_path = '/';
         }
 
+        $default_scope = $public_path;
+
+        /**
+         * Filters the service worker scope used by WC Order Flow.
+         *
+         * Allow integrators to narrow or relocate the scope to avoid conflicts with
+         * other service workers running on the same origin.
+         *
+         * @since 1.9.5
+         *
+         * @param string $scope Default scope calculated from the site's public path.
+         * @param string $which Which worker shell is being requested ("worker" or "updater").
+         */
+        $scope = apply_filters('wcof_service_worker_scope', $default_scope, $which);
+        if (!is_string($scope) || trim($scope) === '') {
+            $scope = $default_scope;
+        } else {
+            $scope = trim($scope);
+        }
+
         if(function_exists('status_header')){
             status_header(200);
         } else {
@@ -206,17 +226,39 @@ return $vars;
 
         header('Content-Type: application/javascript; charset=utf-8');
         if($which === 'worker'){
-            header('Service-Worker-Allowed: ' . $public_path);
+            header('Service-Worker-Allowed: ' . $scope);
         }
         header('Cache-Control: no-store, max-age=0, must-revalidate');
         header('X-Content-Type-Options: nosniff');
         header('X-Robots-Tag: noindex');
 
         if(!isset($_SERVER['REQUEST_METHOD']) || strtoupper($_SERVER['REQUEST_METHOD']) !== 'HEAD'){
-            $cdn = ($which === 'updater')
-                ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
-                : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
-            echo "importScripts('$cdn');\n";
+            $default_imports = ($which === 'updater')
+                ? ['https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js']
+                : ['https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js'];
+
+            /**
+             * Filters the list of script URLs imported by the generated service worker shell.
+             *
+             * Using this filter additional worker bundles can be appended safely while
+             * preserving the default OneSignal SDK import.
+             *
+             * @since 1.9.5
+             *
+             * @param string[] $imports Array of script URLs passed to importScripts().
+             * @param string   $which   Which worker shell is being requested ("worker" or "updater").
+             * @param string   $scope   Final service worker scope.
+             */
+            $imports = apply_filters('wcof_service_worker_imports', $default_imports, $which, $scope);
+
+            $imports = array_map('strval', is_array($imports) ? $imports : []);
+            $imports = array_values(array_filter($imports, static function($url){
+                return $url !== '';
+            }));
+
+            if (!empty($imports)) {
+                echo 'importScripts(' . wp_json_encode($imports) . ");\n";
+            }
         }
         exit;
     }
@@ -1860,15 +1902,55 @@ return $vars;
             $public_path = '/';
         }
 
+        $default_scope = $public_path;
+        $scope = apply_filters('wcof_service_worker_scope', $default_scope, 'worker');
+        if (!is_string($scope) || trim($scope) === '') {
+            $scope = $default_scope;
+        } else {
+            $scope = trim($scope);
+        }
+
+        $default_worker_path = $public_path . 'OneSignalSDKWorker.js';
+        /**
+         * Filters the path registered in JavaScript for the primary service worker file.
+         *
+         * @since 1.9.5
+         *
+         * @param string $worker_path Default worker path relative to the site root.
+         * @param string $scope       Final service worker scope.
+         */
+        $worker_path = apply_filters('wcof_service_worker_path', $default_worker_path, $scope);
+        if (!is_string($worker_path) || trim($worker_path) === '') {
+            $worker_path = $default_worker_path;
+        } else {
+            $worker_path = trim($worker_path);
+        }
+
+        $default_updater_path = $public_path . 'OneSignalSDKUpdaterWorker.js';
+        /**
+         * Filters the path registered in JavaScript for the OneSignal updater worker file.
+         *
+         * @since 1.9.5
+         *
+         * @param string $updater_path Default updater worker path relative to the site root.
+         * @param string $scope        Final service worker scope.
+         */
+        $updater_path = apply_filters('wcof_service_worker_updater_path', $default_updater_path, $scope);
+        if (!is_string($updater_path) || trim($updater_path) === '') {
+            $updater_path = $default_updater_path;
+        } else {
+            $updater_path = trim($updater_path);
+        }
+
         wp_enqueue_script('wcof-onesignal', plugins_url('assets/onesignal-init.js', __FILE__), [], '1.9.0', true);
         wp_localize_script('wcof-onesignal', 'WCOF_PUSH', [
             'appId'           => $s['app_id'],
             'userId'          => get_current_user_id(),
             'isAdmin'         => current_user_can('manage_woocommerce') ? 1 : 0,
             'isRider'         => current_user_can('wcof_rider') ? 1 : 0,
-            'swScope'         => $public_path,
-            'swWorkerPath'    => $public_path . 'OneSignalSDKWorker.js',
-            'swUpdaterPath'   => $public_path . 'OneSignalSDKUpdaterWorker.js',
+            'swScope'         => $scope,
+            'swWorkerPath'    => $worker_path,
+            'swUpdaterPath'   => $updater_path,
         ]);
     }
 

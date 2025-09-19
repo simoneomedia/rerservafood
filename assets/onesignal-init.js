@@ -85,6 +85,45 @@
     return fallback;
   }
 
+  function normalizeScope(value) {
+    var scope = stringOrDefault(value, '/');
+    if (typeof scope !== 'string') {
+      scope = '/';
+    }
+    scope = scope.trim();
+    if (!scope) {
+      return '/';
+    }
+    if (scope.indexOf('://') !== -1) {
+      return scope;
+    }
+    if (scope.charAt(0) !== '/') {
+      scope = '/' + scope;
+    }
+    if (scope.charAt(scope.length - 1) !== '/') {
+      scope += '/';
+    }
+    return scope;
+  }
+
+  function normalizeWorkerPath(value, fallback) {
+    var path = stringOrDefault(value, fallback);
+    if (typeof path !== 'string') {
+      return fallback;
+    }
+    path = path.trim();
+    if (!path) {
+      return fallback;
+    }
+    if (path.indexOf('://') !== -1) {
+      return path;
+    }
+    if (path.charAt(0) !== '/') {
+      path = '/' + path;
+    }
+    return path;
+  }
+
   function normalizeUserId(value) {
     var parsed = parseInt(value, 10);
     if (isNaN(parsed) || parsed <= 0) {
@@ -303,9 +342,9 @@
   };
   window.wcofFetchPushInfo = fetchPushInfo;
 
-  var serviceWorkerScope = stringOrDefault(WCOF_PUSH.swScope, '/');
-  var serviceWorkerPath = stringOrDefault(WCOF_PUSH.swWorkerPath, '/OneSignalSDKWorker.js');
-  var serviceWorkerUpdaterPath = stringOrDefault(WCOF_PUSH.swUpdaterPath, '/OneSignalSDKUpdaterWorker.js');
+  var serviceWorkerScope = normalizeScope(WCOF_PUSH.swScope);
+  var serviceWorkerPath = normalizeWorkerPath(WCOF_PUSH.swWorkerPath, '/OneSignalSDKWorker.js');
+  var serviceWorkerUpdaterPath = normalizeWorkerPath(WCOF_PUSH.swUpdaterPath, '/OneSignalSDKUpdaterWorker.js');
 
   OneSignal.push(function() {
     OneSignal.init({
