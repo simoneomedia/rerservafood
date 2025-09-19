@@ -119,11 +119,8 @@ final class WCOF_Plugin {
         add_action('admin_init', [$this,'maybe_redirect_setup']);
         add_action('admin_post_wcof_finish_setup', [$this,'handle_finish_setup']);
         add_action('wp_enqueue_scripts', [$this,'ensure_interactivity_module'], 5);
-        add_action('wp_enqueue_scripts', [$this,'maybe_enqueue_pwa_assets']);
         add_action('wp_enqueue_scripts', [$this,'maybe_inject_onesignal_sdk']);
         add_action('wp_enqueue_scripts', [$this,'enqueue_checkout_scripts']);
-        add_action('wp_head',          [$this,'maybe_output_pwa_meta'], 5);
-        add_action('wp_footer',        [$this,'render_pwa_install_prompt']);
         add_action('admin_enqueue_scripts', [$this,'ensure_interactivity_module'], 5);
         add_filter('woocommerce_shipping_methods', [$this,'register_shipping_method']);
         add_action('admin_enqueue_scripts', [$this,'admin_scripts']);
@@ -147,7 +144,6 @@ final class WCOF_Plugin {
         add_filter('query_vars', [$this,'add_query_vars']);
         add_action('template_redirect', [$this,'maybe_serve_sw']);
         add_filter('redirect_canonical', [$this,'prevent_sw_canonical'], 10, 2);
-        add_filter('web_app_manifest', [$this,'filter_web_app_manifest']);
         add_action('update_option_' . self::OPTION_KEY, [$this,'maybe_flush_sw_rewrite'], 10, 2);
         add_action('admin_init', [$this,'maybe_force_sw_rewrite_flush']);
 
@@ -167,8 +163,6 @@ public function register_sw_rewrite(){
 add_rewrite_rule('^OneSignalSDKWorker\.js$', 'index.php?wcof_sw=worker', 'top');
 add_rewrite_rule('^OneSignalSDKUpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
 add_rewrite_rule('^UpdaterWorker\.js$', 'index.php?wcof_sw=updater', 'top');
-add_rewrite_rule('^wcof-pwa-worker\.js$', 'index.php?wcof_sw=pwa', 'top');
-add_rewrite_rule('^wcof-navigation-worker\.js$', 'index.php?wcof_sw=pwa', 'top');
 }
 public function add_query_vars($vars){
 $vars[]='wcof_sw';
@@ -186,14 +180,12 @@ return $vars;
                 $which = 'worker';
             } elseif($basename === 'OneSignalSDKUpdaterWorker.js' || $basename === 'UpdaterWorker.js'){
                 $which = 'updater';
-            } elseif($basename === 'wcof-pwa-worker.js' || $basename === 'wcof-navigation-worker.js'){
-                $which = 'pwa';
             }
         }
 
         if(!$which) return;
 
-        $which = in_array($which, ['worker','updater','pwa'], true) ? $which : 'worker';
+        $which = in_array($which, ['worker','updater'], true) ? $which : 'worker';
 
         $public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
         if (!is_string($public_path) || $public_path === '') {
@@ -213,7 +205,7 @@ return $vars;
         }
 
         header('Content-Type: application/javascript; charset=utf-8');
-        if($which === 'worker' || $which === 'pwa'){
+        if($which === 'worker'){
             header('Service-Worker-Allowed: ' . $public_path);
         }
         header('Cache-Control: no-store, max-age=0, must-revalidate');
@@ -221,90 +213,12 @@ return $vars;
         header('X-Robots-Tag: noindex');
 
         if(!isset($_SERVER['REQUEST_METHOD']) || strtoupper($_SERVER['REQUEST_METHOD']) !== 'HEAD'){
-            if($which === 'pwa'){
-                echo $this->render_pwa_worker_script();
-            } else {
-                $cdn = ($which === 'updater')
-                    ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
-                    : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
-                echo "importScripts('$cdn');\n";
-            }
+            $cdn = ($which === 'updater')
+                ? 'https://cdn.onesignal.com/sdks/OneSignalSDKUpdaterWorker.js'
+                : 'https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js';
+            echo "importScripts('$cdn');\n";
         }
         exit;
-    }
-
-    private function render_pwa_worker_script(){
-        $encode = function($value){
-            if(function_exists('wp_json_encode')){
-                $encoded = wp_json_encode($value);
-            } else {
-                $encoded = json_encode($value);
-            }
-            if(!is_string($encoded)){
-                $encoded = 'null';
-            }
-            return $encoded;
-        };
-
-        $cache_prefix = 'wcof-pwa-navigation-';
-
-        if(!$this->is_pwa_enabled()){
-            $template_path = plugin_dir_path(__FILE__) . 'assets/pwa-worker-disabled.js';
-            $template = '';
-            if(is_readable($template_path)){
-                $template = file_get_contents($template_path);
-            }
-            if(!is_string($template) || $template === ''){
-                $template = "const CACHE_PREFIX = __CACHE_PREFIX__;\nself.addEventListener('install', function(event){\n  self.skipWaiting();\n});\nself.addEventListener('activate', function(event){\n  event.waitUntil(\n    caches.keys().then(function(keys){\n      return Promise.all(\n        keys\n          .filter(function(key){\n            return key.startsWith(CACHE_PREFIX);\n          })\n          .map(function(key){\n            return caches.delete(key);\n          })\n      );\n    }).catch(function(){\n      return Promise.resolve();\n    }).then(function(){\n      if (self.registration && self.registration.unregister) {\n        return self.registration.unregister();\n      }\n      return true;\n    }).then(function(){\n      if (!self.clients || !self.clients.matchAll) {\n        return true;\n      }\n      return self.clients.matchAll({ type: 'window' }).then(function(clients){\n        if (!clients || !clients.length) {\n          return true;\n        }\n        var reloads = [];\n        for (var i = 0; i < clients.length; i++) {\n          var client = clients[i];\n          if (client && typeof client.navigate === 'function') {\n            reloads.push(client.navigate(client.url).catch(function(){}));\n          }\n        }\n        if (reloads.length) {\n          return Promise.all(reloads);\n        }\n        return true;\n      });\n    }).catch(function(){\n      return Promise.resolve();\n    })\n  );\n});\n";
-            }
-
-            return strtr($template, [
-                '__CACHE_PREFIX__' => $encode($cache_prefix),
-            ]);
-        }
-
-        $template_path = plugin_dir_path(__FILE__) . 'assets/pwa-worker.js';
-        $template = '';
-        if(is_readable($template_path)){
-            $template = file_get_contents($template_path);
-        }
-        if(!is_string($template) || $template === ''){
-            $template = "const CACHE_PREFIX = __CACHE_PREFIX__;\nconst CACHE_VERSION = __CACHE_VERSION__;\nconst CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;\nconst START_URL = __START_URL__;\nconst OFFLINE_HTML = __OFFLINE_HTML__;\nconst OFFLINE_RESPONSE = new Response(OFFLINE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });\nself.addEventListener('install', function(event){\n  event.waitUntil(\n    caches.open(CACHE_NAME).then(function(cache){\n      return cache.addAll([START_URL]).catch(function(){\n        return Promise.resolve();\n      });\n    }).catch(function(){\n      return Promise.resolve();\n    })\n  );\n  self.skipWaiting();\n});\nself.addEventListener('activate', function(event){\n  event.waitUntil(\n    caches.keys().then(function(keys){\n      return Promise.all(keys.filter(function(key){\n        return key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME;\n      }).map(function(key){\n        return caches.delete(key);\n      }));\n    }).catch(function(){\n      return Promise.resolve();\n    }).then(function(){\n      return self.clients.claim();\n    })\n  );\n});\nself.addEventListener('fetch', function(event){\n  var request = event.request;\n  if (!request || request.method !== 'GET') {\n    return;\n  }\n  var url;\n  try {\n    url = new URL(request.url);\n  } catch (error) {\n    return;\n  }\n  if (url.origin !== self.location.origin) {\n    return;\n  }\n  var accept = request.headers && request.headers.get ? request.headers.get('accept') || '' : '';\n  var isNavigation = request.mode === 'navigate' || accept.indexOf('text/html') !== -1;\n  if (!isNavigation) {\n    return;\n  }\n  event.respondWith(\n    fetch(request).then(function(response){\n      if (response && response.status === 200 && (response.type === 'basic' || response.type === 'default')) {\n        var cacheCopy = response.clone();\n        var startCopy = request.mode === 'navigate' ? response.clone() : null;\n        caches.open(CACHE_NAME).then(function(cache){\n          cache.put(request, cacheCopy).catch(function(){});\n          if (startCopy) {\n            cache.put(START_URL, startCopy).catch(function(){});\n          }\n        }).catch(function(){});\n      }\n      return response;\n    }).catch(function(){\n      return caches.match(request).then(function(match){\n        if (match) {\n          return match;\n        }\n        return caches.match(START_URL).then(function(fallback){\n          if (fallback) {\n            return fallback;\n          }\n          return OFFLINE_RESPONSE.clone();\n        });\n      });\n    })\n  );\n});\n";
-        }
-
-        $start_url = trailingslashit(home_url());
-        $site_name = wp_strip_all_tags(get_bloginfo('name', 'display'));
-        if($site_name === ''){
-            $site_name = 'ReeservaFood';
-        }
-
-        $locale = function_exists('determine_locale') ? determine_locale() : get_locale();
-        if(!is_string($locale) || $locale === ''){
-            $locale = 'en';
-        }
-
-        $lang_attr = preg_replace('/[^a-zA-Z0-9-]/', '', $locale);
-        if($lang_attr === ''){
-            $lang_attr = 'en';
-        }
-
-        $style = 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:48px 24px;background:#0f172a;color:#f8fafc;text-align:center;}main{max-width:460px;margin:0 auto;}h1{font-size:1.6rem;margin-bottom:0.75rem;}p{margin:0;font-size:1rem;line-height:1.5;}';
-
-        $offline_html = sprintf(
-            '<!DOCTYPE html><html lang="%1$s"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%2$s</title><style>%3$s</style></head><body><main><h1>%4$s</h1><p>%5$s</p></main></body></html>',
-            esc_attr($lang_attr),
-            esc_html($site_name),
-            $style,
-            esc_html__('You\'re offline', 'wc-order-flow'),
-            esc_html__('Check your connection and try again.', 'wc-order-flow')
-        );
-
-        return strtr($template, [
-            '__CACHE_PREFIX__' => $encode($cache_prefix),
-            '__CACHE_VERSION__' => $encode('v' . self::SW_REWRITE_VERSION),
-            '__START_URL__' => $encode($start_url),
-            '__OFFLINE_HTML__' => $encode($offline_html),
-        ]);
     }
 
     /* Avoid any 301/302 on SW files — redirects break registration */
@@ -318,8 +232,6 @@ return $vars;
             '/OneSignalSDKWorker.js',
             '/OneSignalSDKUpdaterWorker.js',
             '/UpdaterWorker.js',
-            '/wcof-pwa-worker.js',
-            '/wcof-navigation-worker.js',
         ];
 
         if (is_string($path) && in_array($path, $blocked_paths, true)) {
@@ -330,8 +242,6 @@ return $vars;
             'OneSignalSDKWorker.js',
             'OneSignalSDKUpdaterWorker.js',
             'UpdaterWorker.js',
-            'wcof-pwa-worker.js',
-            'wcof-navigation-worker.js',
         ];
 
         if (in_array($basename, $blocked_basenames, true)) {
@@ -341,277 +251,12 @@ return $vars;
         return $redirect_url;
     }
 
-    public function filter_web_app_manifest($manifest){
-        $manifest = is_array($manifest) ? $manifest : [];
-
-        if(!$this->is_pwa_enabled()){
-            return $manifest;
-        }
-
-        $site_name = wp_strip_all_tags(get_bloginfo('name', 'display'));
-        if($site_name === ''){
-            $site_name = 'ReeservaFood';
-        }
-
-        $short_name = $site_name;
-        $length_callback = function_exists('mb_strlen') ? 'mb_strlen' : 'strlen';
-        $substr_callback = function_exists('mb_substr') ? 'mb_substr' : 'substr';
-        if($length_callback($short_name) > 12){
-            $short_name = $substr_callback($short_name, 0, 12);
-        }
-
-        $home = trailingslashit(home_url());
-        $manifest['name'] = $site_name;
-        $manifest['short_name'] = $short_name;
-        $manifest['start_url'] = $home;
-        $manifest['scope'] = $home;
-        $manifest['display'] = 'standalone';
-        $manifest['theme_color'] = '#3b82f6';
-        $manifest['background_color'] = '#ffffff';
-        if(empty($manifest['id'])){
-            $manifest['id'] = $home;
-        }
-
-        if(function_exists('determine_locale')){
-            $manifest['lang'] = determine_locale();
-        }
-
-        $tagline = wp_strip_all_tags(get_bloginfo('description', 'display'));
-        if($tagline !== ''){
-            $manifest['description'] = $tagline;
-        }
-
-        $icons = [];
-        $existing = [];
-
-        if(!empty($manifest['icons']) && is_array($manifest['icons'])){
-            foreach($manifest['icons'] as $icon){
-                if(!is_array($icon) || empty($icon['src'])) continue;
-
-                $icons[] = $icon;
-
-                if(empty($icon['sizes'])) continue;
-                $declared = preg_split('/\s+/', (string) $icon['sizes']);
-                foreach((array) $declared as $size){
-                    if(preg_match('/^(\d+)x\1$/', (string) $size, $m)){
-                        $existing[(int) $m[1]] = true;
-                    }
-                }
-            }
-        }
-
-        foreach([192, 512] as $target){
-            if(isset($existing[$target])) continue;
-
-            $src = '';
-            $type = '';
-
-            if(function_exists('get_site_icon_url')){
-                $src = get_site_icon_url($target);
-            }
-
-            if($src){
-                $type = $this->manifest_icon_mime_from_url($src);
-            } else {
-                $src  = $this->fallback_manifest_icon_data_uri($target);
-                $type = 'image/png';
-            }
-
-            if(!$src) continue;
-
-            $icon = [
-                'src'   => $src,
-                'sizes' => $target . 'x' . $target,
-                'type'  => $type ?: 'image/png',
-            ];
-
-            if(strpos($src, 'data:image/') === 0){
-                $icon['purpose'] = 'any maskable';
-            }
-
-            $icons[] = $icon;
-            $existing[$target] = true;
-        }
-
-        if(!empty($icons)){
-            $manifest['icons'] = array_values($icons);
-        } else {
-            unset($manifest['icons']);
-        }
-
-        return $manifest;
-    }
-
-    private function fallback_manifest_icon_data_uri($target){
-        static $data_uris = [
-            192 => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3G' .
-                'wHAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAFe0lEQVR4nO3dMXIbRxCF4aZLgVNmvA' .
-                'GVWZkPo3LoKp3FJ3CVQpcP40x2JJ+GTrwiBWLBnd2Z2X79/i9UlSBgpv/ZFQBKd/' .
-                'cPj08BmPrh7CcAnIkAYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI' .
-                '0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI' .
-                '0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYI0AYO3d2U/Axcevn5t/z5' .
-                '/vfx3wTPDS3f3D49PZT6Knv7/89erXfvrw87Q/f8+gtyKMfkoEcG3o14yIYcbQry' .
-                'GGY+QDaBn+RY8Izhz6NcTQTjqAPcO/2BNBxqFfQwzbyAZwZPgXWyNQGvxLhHCbZA' .
-                'A9hn9xKwLlwb9ECNfJfQ7Qc/hvPV6l4Y+o93p64XOAC5UHZXltXA2eEcD/Kg/+JU' .
-                'J4JnUL1Pv2Z/TjZucU/RqpANCfewQEgPj49bNtCASAbxwjIAB8xy0CqQBGfavztx' .
-                '//GfK4qpwikAoA87hEQABY5RCBXAC9b4O4/bmtegRyAUT0i4Dh36ZyBJIBRByPgO' .
-                'FvUzUC2QAi9kfA8GMhHUBEewQM/34VrwKSPxBzy7UvtjH0fVX6FmmpACqeUFlViU' .
-                'D+Fgg4okwAnP5zVVlvfiLMyB+Pn7o8zi///t7lcTIocQWochqNNGL4K6y7fAAVNk' .
-                'GZ+vrLB4C3ceuzTjoA9dNnhhnDr7wP0gEAR8kGoHzqzDLz1kd1P2QDwG3c929DAA' .
-                'Ux/NtJBqB6ua1OcV8kA8A6Tv82BFAIw99OLgDFy6wTtf2RCwDXcfrvQwAFMPz7SQ' .
-                'Wgdnl1pbRPUgHgNU7/YwhAGMN/HAHAGgGI4vTvgwAEMfz9yASQ4Z2FXoOX4TmMHv' .
-                '4M+7WFTABZZIgA/RDADmdFoHL6KyGAnWZHwPCPQQAHcDukjwAOmhEBp/84BNDByA' .
-                'gY/rEIoBNuhzQRQEe9I+D0H48AOus1tAz/HAQwALdDOghgkCMRcPrPQwAD7Rlkhn' .
-                '8umQBU/1O2loGuNPwq+yUTgDL+TpAXAUzyVgSVTn8lBDDR2pAz/OchgMm4HcqFAE' .
-                '7wMgJO/3Pd3T88Pp39JFqc+aN2WU/vbMOv8g5QBFcAmCOABtlO2oicz0mJXABnX1' .
-                '4zDVym57I4e39ayQWQQcbBwz4EsNPZEZz951chGUCWy+xZQ5h1+LPsSwvJADKZPY' .
-                'xZh18VAXTAUOqSDSDb5XZGBJlDy7YfW8kGkNHIAc08/MqkA8h46jgOasZ92Eo6gK' .
-                'x6R+AY1SxyX4a7Juu/Rb/1y3PKA658+kcUuQJk3QTlwd4i67q3KBFAZtUjUFcmgM' .
-                'ynUcUIMq93izIBZFcxggpKBZD9VKoSQfZ1blEqgIj8m6MeQfb1bVUugIj8m6QaQf' .
-                'Z13aNkAApUI6imbAAKp5VSBArruUeJT4JvyfopsZKqwx9R+AqwqLx5M1Rfv/IBRN' .
-                'TfxFEc1s0igAiPzezJZb1sAojw2dSjnNbJKoAIr83dw2197AKI8NvkrRzXpfzboG' .
-                '/hbVLPwV9YXgFect78CF6/fQARvkPg+rpfsr8FuuRwS8TgPyOAFRVDYPBf4xZoRb' .
-                'VhqfZ6euEKsIHy1YDBv40AGiiFwOBvQwA7ZYyBoW9HAB2cGQNDfwwBdDYjBoa+Hw' .
-                'KYZE8YDPp4BABrfA4AawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAaw' .
-                'QAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAaw' .
-                'QAawQAawQAawQAawQAawQAawQAawQAawQAawQAawQAa/8BMZWfCMYuh5EAAAAASUVORK5CYII=',
-            512 => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eN' .
-                'T6AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAPw0lEQVR4nO3dPZIb1xmGUVDFwCkz7m' .
-                'CU2ZkXo3KoKq3FK3CVQpUWo0xyJK+GDmiYMxxi0ADu7/eeE0tUC9N9v+feBsl3Hz' .
-                '4+fToBAFG+m30BAMB4AgAAAgkAAAgkAAAgkAAAgEACAAACCQAACCQAACCQAACAQA' .
-                'IAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAAAgkAAAgEACAAACCQAACCQAACCQAA' .
-                'CAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAAAgkAAAgEACAAACCQAACCQAAC' .
-                'CQAACAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAAAgkAAAgEACAAACCQAACC' .
-                'QAACCQAACAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAAAgkAAAgEACAAACCQ' .
-                'AACCQAACCQAACAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAAAgkAAAgEACAA' .
-                'ACCQAACCQAACCQAACAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAAAgkAAAgE' .
-                'ACAAACCQAACCQAACCQAACAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAAAgkA' .
-                'AAgEACAAACCQAACCQAACCQAACAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAAgkAA' .
-                'AgkAAAgEACAAACCQAACCQAACCQAACAQAIAAAIJAAAIJAAAIJAAAIBAAgAAAgkAAA' .
-                'gkAAAg0PvZF8A+/vj9t6v/zF//9vcBV8Jbfvjz526/9q/f/9jt1wbGevfh49On2R' .
-                'fBmo4M/GsEQVs9h3srIgH2IAB4ocXQv0QMHLfDoL+VMIC1CABOp1Pfwf81IfBaxY' .
-                'F/jSCAuQRAuJGD/2upIZA47I8SBTCOAAg2c/ifpUSAoX87MQB9CYBAKwz+r1ULAQ' .
-                'O/PUEAbQmAMCsO/7PdI8DQH0cMwOMEQJCVh//ZbhFg6M8nBuA+AiDEDsP/bIcIMP' .
-                'jXIwTgNgIgwE7D/2zFCDD09yEG4DoBUNyOw/9slQgw+PclBOAyAVDYzsP/bGYEGP' .
-                'x1CAF4zV8GBM8Y+jU9/7mKAfjMCUBRFXb/ZyNOAQz+PEKAdAKgoErD/6xXBBj8CA' .
-                'FSeQVAJIOfs/O9IARI4wSgmIq7/7MWpwAGP9cIAVJ8N/sCYBTDnyPcJ6RwAlBI5d' .
-                '3/2T2nABZ07uU0gMp8B4CyDH4e5fsBVOYVACUZ/rTkfqIirwCKSDj+P3vrNYCFmt' .
-                '6cBlCFVwCUYPAzitcCVOEVANsz/JnBfcfunACwLQswszkNYGe+A1BA0vv/s3/+5d' .
-                '+zLwFeEAHsxisAgAacSLEbAQDQyA9//iwE2IYAAGhMBLADAQDQgQhgdQIAoBOvBF' .
-                'iZAADoTASwIgEAMIAIYDUCAGAQEcBKBEABb/3lOBX5Q4DYmQhgFQIAYDARwAoEAM' .
-                'AEfocAswkAgIlEALMIgCJSvgfg/T8ViQBmEAAACxABjCYAABYhAhhJABRS/TWA43' .
-                '8SiABGEQAAixEBjCAAiql6CmD3TxoRQG8CAGBRIoCeBEBB1U4B7P5JJgLoRQAUVS' .
-                'UCDH8QAfQhAAAgkAAobPdTALt/+MIpAK0JgOJ2jQDDH14TAbQkAALsFgGGP1wmAm' .
-                'hFAITYJQIMf7hOBNCCAAiyegQY/nCcCOBRAiDMqhFg+MPtRACPeD/7AhjvHAF//P' .
-                '7b5Csx+AFmcQIQbPZpgOEPj3MKwL3effj49Gn2RTDfyNMAgx/a+/X7H2dfApsRAL' .
-                'zQMwQMfuhLBHAL3wHgheevBVrEgKEPsCYnABx2JAgMfJjLKQBHCQAO82Uj2IMI4A' .
-                'i/C4BDDH/Yh+eVIwQAAAQSAFxlNwH78dxyjQDgTRYR2Jfnl7cIAAAIJAC4yO4B9u' .
-                'c55hIBAACBBADfZNcAdXie+RYBwCsWC6jHc83X/F0AAG/45emn2ZfwsH/851+zL4' .
-                'EFOQHgBbsE+KLa8Pd885wAAIBAAoD/szuAL6rt/s8855wJAE6nk0UBnqs6/M8875' .
-                'xOAgAAIgkA7Abgmeq7/zPPPQIA4H9Shj+cTgIgnl0AfJY4/D3/2QQAAAQSAMHUP3' .
-                'yWuPs/sw7kEgBAtOThTzYBEEr1A2fWg0wCAIhl908yAQBEMvxJJwACOe4DvmZdyC' .
-                'MAgDh2/yAA4qh80hn+l1kfsggAIIbhD18IgCDqHrjGOpFDAAAR7P7hJQEAlGf4w2' .
-                'sCIIRjPeAo60UGAQCUZvcP3yYAAqh5Uhn+97Nu1CcAACCQAABKsvuHtwmA4hzjkc' .
-                'jwb8P6UZsAAEox/OEYAQAAgQRAYY7vSGP33551pC4BAJRg+MNtBAAABBIAwPbs/u' .
-                'F2AqAo7+1IYfj3Zz2pSQAAQCABAGzL7h/uJwAKclxHAsN/LOtKPQIA2I7hD48TAA' .
-                'AQSAAAW7H7hzYEALANwx/aEQDF+KIO0Iv1pRYBAGzB7h/aEgDA8gx/aE8AAEAgAV' .
-                'CI93NUZPe/FutMHQIAWJbhD/0IAAAIJACAJdn9Q18CAFiO4Q/9CQBgKYY/jCEAiv' .
-                'DNXGAU600NAgBYht0/jCMAgCUY/jCWAACAQAIAmM7uH8YTAMBUhj/MIQAAIJAAAK' .
-                'ax+4d5BAAwheEPcwmAAvyhHOzG8N+fdWd/AgAAAgkAYCi7f1iDAACGMfxhHQIAAA' .
-                'IJAGAIu39YiwAAujP8YT0CAAACCQCgK7t/WJMAALox/GFdAgDowvCHtQkAAAgkAI' .
-                'Dm7P5hfQIAaMrwhz0IAAAIJACAZuz+YR8CAGjC8Ie9CAAACCQAgIfZ/cN+BADwEM' .
-                'Mf9iQAgLsZ/rCv97MvAG5RYeBcYyABIzgBYCsJw3GXyNnlOt+ScD/BJQKggF+//3' .
-                'H2JQyVsGivPlxXv74jEu6jntLWnYoEAFtKWLwrDFlgXQKAbYmAOVa8plsl3DtwjQ' .
-                'BgawkL+UoDd6VruVfCPQNHCAC2l7CgVxi8wFoEACWIgPr//RYS7hM4SgBQRsLiPm' .
-                'sIG/5QjwCglIRFfvQwNvyhJgFAOQmLfYWhDMwlAIrwh3K8JAL2+W/0lnAvjGa9qU' .
-                'EAUFbCwt9zQBv+UJsAoLSEAVBhUAPjCQDKEwHzf70ZEn7u8AgBQISEYdBqaBv+kE' .
-                'EAECNhKFQY3sAYAqAQ38y9TgT0+3dXkfAznsk6U4cAIE7CgLhnkBv+kEUAEClhUF' .
-                'QY6EA/AoBYIuD2f25lCT9PaEkAFOP93G0Shsa14W74c5T1pRYBQLyE4XFpyBv+kE' .
-                'sAwCljiFQY9kA7AgD+Jy0CKgRBws8MehEA8EzCQPnl6SfDHxAAFfmizmMMFnjNul' .
-                'KPAIBvEAFr8/OBxwkAuMCQWZOfC7QhAIpyXAe0Yj2pSQDAG+w21+LnAe0IALjC0F' .
-                'mDnwO0JQDgAMNnLp8/tCcACvPeri1DiETWkboEANxABIznM4c+BADcyEAax2cN/Q' .
-                'iA4hzf9WEwkcD6UZsAgDuJgL58vtCXAIAHGFJ9+FyhPwEQwDFeX4YVFVk36hMA0I' .
-                'AIaMdnCWMIgBBqvj+D63E+wzVYLzIIAGjIALufzw7GEgDQmEEG7EAABHGsN44IuI' .
-                '3Pax3WiRwCADox1I7xOcEcAiCMuh/LcGMn1ocsAgA6EwGX+WxgHgEQSOWPZ9C95j' .
-                'NZi3UhjwCAQQw8YCUCAAYSAZ/5HGA+ARDKcd886cMv/f9/RdaDTAIAJkgdgqn/37' .
-                'AiARBM9c9lGLIC60AuAQATJUVA0v8r7EAAhFP/8xmMzOL5zyYAYAEJEfDL00+zLw' .
-                'F4RgBgF7AIEcBInnvez74A4IuECADW4ASA0+lkNwBJPO+cTgKAZywKUJ/nnDMBAA' .
-                'CBBAAv2B1AXZ5vnhMAABBIAPCKXQLU47nmawKAb7JYQB2eZ75FAABAIAHARXYNsD' .
-                '/PMZcIAAAIJAB4k90D7Mvzy1sEAFdZRGA/nluuEQAAEEgAcIjdBOzD88oRAoDDLC' .
-                'qwPs8pRwkAbmJxgXV5PrmFAACAQAKAm9llwHo8l9xKAHAXiw2sw/PIPQQAd7PowH' .
-                'yeQ+4lAAAgkADgIXYfMI/nj0cIAB5mEYLxPHc8SgDQhMUIxvG80YIAoBmLEvTnOa' .
-                'MVAUBTFifox/NFSwKA5ixS0J7nitYEAAAEEgB0YbcC7Xie6EEA0I1FCx7nOaIXAU' .
-                'BXFi+4n+eHngQA3VnE4HaeG3oTAAxhMYPjPC+MIAAYxqIG13lOGEUAMJTFDS7zfD' .
-                'CSAGA4ixy85rlgNAHAFBY7+MLzwAwCgGkseuA5YJ53Hz4+fZp9EfDDnz/PvgQYyu' .
-                'BnNicALMFiSBL3OysQACzDokgC9zmrEAAsxeJIZe5vViIAWI5Fkorc16xGALAkiy' .
-                'WVuJ9Zkd8FwPL8DgF2ZfCzMicALM8iyo7ct6xOALAFiyk7cb+yA68A2I5XAqzK4G' .
-                'cnTgDYjkWWFbkv2Y0AYEsWW1bifmRHXgGwPa8EmMXgZ2dOANieRZgZ3HfszgkApT' .
-                'gNoDeDnyoEACUJAVoz+KnGKwBKsljTkvuJipwAUJ7TAO5l8FOZACCGEOAog58EXg' .
-                'EQw6LOEe4TUjgBIJLTAL5m8JNGABBNCGDwk0oAwEkIJDL4SScA4BkhUJ/BD58JAL' .
-                'hADNRh6MNrAgCuEAL7MvjhMgEABwmBfRj8cJ0AgDuIgfUY+nAbAQAPEALzGfxwHw' .
-                'EAjYiBcQx9eJwAgA7EQHuGPrQlAGAAQXA7Ax/6EgAwmBi4zNCHcQQALCAxCgx7mE' .
-                'sAwIIqBoGBD2sRALCRHcLAoIc9CAAopmckGO5QhwAAgEDfzb4AAGA8AQAAgQQAAA' .
-                'QSAAAQSAAAQCABAACBBAAABBIAABBIAABAIAEAAIEEAAAEEgAAEEgAAEAgAQAAgQ' .
-                'QAAAQSAAAQSAAAQCABAACBBAAABBIAABBIAABAIAEAAIEEAAAEEgAAEEgAAEAgAQ' .
-                'AAgQQAAAQSAAAQSAAAQCABAACBBAAABBIAABBIAABAIAEAAIEEAAAEEgAAEEgAAE' .
-                'AgAQAAgQQAAAQSAAAQSAAAQCABAACBBAAABBIAABBIAABAIAEAAIEEAAAEEgAAEE' .
-                'gAAEAgAQAAgQQAAAQSAAAQSAAAQCABAACBBAAABBIAABBIAABAIAEAAIEEAAAEEg' .
-                'AAEEgAAEAgAQAAgQQAAAQSAAAQSAAAQCABAACBBAAABBIAABBIAABAIAEAAIEEAA' .
-                'AEEgAAEEgAAEAgAQAAgQQAAAQSAAAQSAAAQCABAACBBAAABBIAABBIAABAIAEAAI' .
-                'EEAAAEEgAAEEgAAEAgAQAAgQQAAAQSAAAQSAAAQCABAACBBAAABBIAABBIAABAIA' .
-                'EAAIEEAAAEEgAAEEgAAEAgAQAAgQQAAAT6L7fhDKdvz3EqAAAAAElFTkSuQmCC',
-        ];
-
-        $target = (int) $target;
-
-        return $data_uris[$target] ?? '';
-    }
-
-    private function manifest_icon_mime_from_url($url){
-        if(!is_string($url) || $url === ''){
-            return 'image/png';
-        }
-
-        $path = parse_url($url, PHP_URL_PATH);
-        if(!is_string($path) || $path === ''){
-            $path = $url;
-        }
-
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        switch($ext){
-            case 'svg':
-                return 'image/svg+xml';
-            case 'jpg':
-            case 'jpeg':
-                return 'image/jpeg';
-            case 'gif':
-                return 'image/gif';
-            case 'webp':
-                return 'image/webp';
-            case 'ico':
-            case 'cur':
-                return 'image/x-icon';
-        }
-
-        return 'image/png';
-    }
-
     // Flush rewrite rules when push is enabled to ensure SW scripts load
     public function maybe_flush_sw_rewrite($old, $new){
         $old_enabled = !empty($old['enable']);
         $new_enabled = !empty($new['enable']);
-        $old_pwa_enabled = !empty($old['pwa_enable']);
-        $new_pwa_enabled = !empty($new['pwa_enable']);
 
-        $should_flush = false;
         if(!$old_enabled && $new_enabled){
-            $should_flush = true;
-        }
-        if(!$old_pwa_enabled && $new_pwa_enabled){
-            $should_flush = true;
-        }
-
-        if($should_flush){
             $this->register_sw_rewrite();
             flush_rewrite_rules();
         }
@@ -1406,7 +1051,6 @@ return $vars;
             <p><label><?php esc_html_e('Usual waiting time (min – max minutes)', 'wc-order-flow'); ?> <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_min]" value="<?php echo esc_attr($s['wait_min']); ?>" style="width:80px"/> – <input type="number" min="0" step="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[wait_max]" value="<?php echo esc_attr($s['wait_max']); ?>" style="width:80px"/></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Store closed', 'wc-order-flow'); ?></label></p>
             <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></label></p>
-            <p><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_enable]" value="1" <?php checked($s['pwa_enable'],1); ?>/> <?php esc_html_e('Show the install app banner to customers', 'wc-order-flow'); ?></label></p>
             <p><button type="submit"><?php esc_html_e('Save settings', 'wc-order-flow'); ?></button></p>
           </form>
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -1488,7 +1132,6 @@ return $vars;
             'close_time'=>isset($v['close_time'])?sanitize_text_field($v['close_time']):'',
             'store_closed'=>!empty($v['store_closed'])?1:0,
             'rider_see_processing'=>!empty($v['rider_see_processing'])?1:0,
-            'pwa_enable'=>!empty($v['pwa_enable'])?1:0,
             'postal_codes'=>isset($v['postal_codes'])?sanitize_text_field($v['postal_codes']):'',
             'delivery_radius'=>isset($v['delivery_radius'])?floatval($v['delivery_radius']):0,
             'delivery_polygon'=>isset($v['delivery_polygon'])?wp_kses_post($v['delivery_polygon']):'',
@@ -1521,7 +1164,6 @@ return $vars;
             'enable'=>0,'app_id'=>'','rest_key'=>'','license_key'=>'',
             'notify_admin_new'=>1,'notify_user_processing'=>1,'notify_user_out'=>1,
             'address'=>'','open_days'=>[],'open_time'=>'09:00','close_time'=>'17:00','store_closed'=>0,'rider_see_processing'=>1,
-            'pwa_enable'=>0,
             'postal_codes'=>'','delivery_radius'=>0,'delivery_polygon'=>'','language'=>'auto',
             'wait_min'=>20,'wait_max'=>40
         ]);
@@ -2013,12 +1655,6 @@ return $vars;
             <tr><th scope="row"><?php esc_html_e('Store closed', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[store_closed]" value="1" <?php checked($s['store_closed'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
             <tr><th scope="row"><?php esc_html_e('Riders see processing', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[rider_see_processing]" value="1" <?php checked($s['rider_see_processing'],1); ?>/> <?php esc_html_e('Yes', 'wc-order-flow'); ?></label></td></tr>
             </table>
-            <h2><?php esc_html_e('Progressive Web App', 'wc-order-flow'); ?></h2>
-            <table class="form-table" role="presentation">
-              <tr><th scope="row"><?php esc_html_e('Install banner', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[pwa_enable]" value="1" <?php checked($s['pwa_enable'],1); ?>/> <?php esc_html_e('Allow customers to install the site as an app', 'wc-order-flow'); ?></label>
-                <p class="description"><?php esc_html_e('Adds app meta tags and shows an "Install App" prompt when supported.', 'wc-order-flow'); ?></p>
-              </td></tr>
-            </table>
             <h2><?php esc_html_e('OneSignal', 'wc-order-flow'); ?></h2>
             <table class="form-table" role="presentation">
               <tr><th scope="row"><?php esc_html_e('Enable push', 'wc-order-flow'); ?></th><td><label><input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[enable]" value="1" <?php checked($s['enable'],1); disabled(!$license_valid); ?>/> <?php esc_html_e('On', 'wc-order-flow'); ?></label></td></tr>
@@ -2206,112 +1842,6 @@ return $vars;
                 wp_enqueue_script('wp-interactivity');
             }
         }
-    }
-
-    private function is_pwa_enabled(){
-        $settings = $this->settings();
-        return !empty($settings['pwa_enable']);
-    }
-
-    public function maybe_enqueue_pwa_assets(){
-        if( is_admin() ) return;
-        if( !$this->is_pwa_enabled() ) return;
-        if( function_exists('wp_is_json_request') && wp_is_json_request() ) return;
-
-        $public_path = wp_parse_url(home_url('/'), PHP_URL_PATH);
-        if (!is_string($public_path) || $public_path === '') {
-            $public_path = '/';
-        } else {
-            $public_path = '/' . ltrim($public_path, '/');
-            $public_path = trailingslashit($public_path);
-        }
-        if ($public_path === '') {
-            $public_path = '/';
-        }
-
-        $worker_url = home_url('/wcof-navigation-worker.js');
-        $worker_url = add_query_arg('swv', self::SW_REWRITE_VERSION, $worker_url);
-
-        wp_enqueue_script('wcof-pwa', plugins_url('assets/pwa.js', __FILE__), [], '1.2.0', true);
-        wp_localize_script('wcof-pwa', 'WCOF_PWA', [
-            'dismissKey'    => 'wcofPwaDismissed',
-            'cooldownHours' => 168,
-            'workerUrl'     => esc_url_raw($worker_url),
-            'workerScope'   => $public_path,
-            'strings'       => [
-                'installLabel' => esc_html__('Install App', 'wc-order-flow'),
-                'iosMessage'   => esc_html__('Install this app by tapping the share icon and then "Add to Home Screen".', 'wc-order-flow'),
-                'iosButton'    => esc_html__('Install App', 'wc-order-flow'),
-            ],
-        ]);
-    }
-
-    public function maybe_output_pwa_meta(){
-        if( is_admin() ) return;
-        if( !$this->is_pwa_enabled() ) return;
-        if( function_exists('wp_is_json_request') && wp_is_json_request() ) return;
-
-        $theme_color = '#3b82f6';
-        $site_name = wp_strip_all_tags(get_bloginfo('name', 'display'));
-        if($site_name === ''){
-            $site_name = 'ReeservaFood';
-        }
-
-        $manifest_url = '';
-        if(function_exists('wp_get_web_app_manifest_url')){
-            $manifest_url = wp_get_web_app_manifest_url();
-        }
-        if(!$manifest_url && function_exists('rest_url')){
-            $manifest_url = rest_url('wp/v2/web-app-manifest');
-        }
-
-        echo "\n<!-- ReeservaFood PWA -->\n";
-        echo '<meta name="theme-color" content="'.esc_attr($theme_color).'" />' . "\n";
-        echo '<meta name="mobile-web-app-capable" content="yes" />' . "\n";
-        echo '<meta name="apple-mobile-web-app-capable" content="yes" />' . "\n";
-        echo '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />' . "\n";
-        echo '<meta name="apple-mobile-web-app-title" content="'.esc_attr($site_name).'" />' . "\n";
-        if($manifest_url){
-            echo '<link rel="manifest" href="'.esc_url($manifest_url).'" />' . "\n";
-        }
-
-        $css = <<<'CSS'
-.wcof-pwa-install{position:fixed;left:0;right:0;bottom:16px;z-index:9999;display:flex;justify-content:center;padding:0 16px;box-sizing:border-box;pointer-events:none;}
-.wcof-pwa-install[hidden]{display:none !important;}
-.wcof-pwa-install.is-visible{pointer-events:auto;}
-.wcof-pwa-install__inner{max-width:520px;width:100%;background:#0f172a;color:#fff;padding:16px 20px;border-radius:18px;box-shadow:0 20px 40px rgba(15,23,42,.35);display:flex;flex-direction:column;gap:12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
-.wcof-pwa-install__text strong{display:block;font-size:1rem;line-height:1.4;}
-.wcof-pwa-install__text span{display:block;font-size:.9rem;line-height:1.4;color:rgba(255,255,255,.85);margin-top:4px;}
-.wcof-pwa-install__actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;}
-.wcof-pwa-install__actions button{cursor:pointer;font-size:.9rem;font-weight:600;border-radius:999px;padding:8px 18px;transition:background-color .2s ease,color .2s ease,border-color .2s ease;}
-.wcof-pwa-install__install{background:#3b82f6;border:1px solid #3b82f6;color:#fff;}
-.wcof-pwa-install__install:hover,.wcof-pwa-install__install:focus{background:#2563eb;border-color:#2563eb;}
-.wcof-pwa-install__dismiss{background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;}
-.wcof-pwa-install__dismiss:hover,.wcof-pwa-install__dismiss:focus{border-color:#fff;color:#fff;}
-@media (max-width:480px){.wcof-pwa-install{bottom:8px;padding:0 12px;}.wcof-pwa-install__inner{padding:14px 16px;}}
-CSS;
-
-        echo '<style id="wcof-pwa-style">'.$css.'</style>' . "\n";
-    }
-
-    public function render_pwa_install_prompt(){
-        if( is_admin() ) return;
-        if( !$this->is_pwa_enabled() ) return;
-        if( function_exists('wp_is_json_request') && wp_is_json_request() ) return;
-        ?>
-        <div id="wcof-pwa-install" class="wcof-pwa-install" role="dialog" aria-live="polite" aria-modal="false" hidden>
-          <div class="wcof-pwa-install__inner">
-            <div class="wcof-pwa-install__text">
-              <strong><?php esc_html_e('Install our app', 'wc-order-flow'); ?></strong>
-              <span data-wcof-pwa-message><?php esc_html_e('Install this app on your device for quick access and a fullscreen experience.', 'wc-order-flow'); ?></span>
-            </div>
-            <div class="wcof-pwa-install__actions">
-              <button type="button" class="wcof-pwa-install__dismiss" data-wcof-pwa-dismiss><?php esc_html_e('Maybe later', 'wc-order-flow'); ?></button>
-              <button type="button" class="wcof-pwa-install__install" data-wcof-pwa-install><?php esc_html_e('Install App', 'wc-order-flow'); ?></button>
-            </div>
-          </div>
-        </div>
-        <?php
     }
 
     /* ===== OneSignal init + push senders ===== */
