@@ -146,6 +146,7 @@ final class WCOF_Plugin {
         add_filter('redirect_canonical', [$this,'prevent_sw_canonical'], 10, 2);
         add_action('update_option_' . self::OPTION_KEY, [$this,'maybe_flush_sw_rewrite'], 10, 2);
         add_action('admin_init', [$this,'maybe_force_sw_rewrite_flush']);
+        add_filter('wcof_service_worker_imports', [$this,'extend_service_worker_imports'], 10, 3);
 
         // Push shortcodes (button + debug)
         add_shortcode('wcof_push_button', [$this,'shortcode_push_button']);
@@ -261,6 +262,84 @@ return $vars;
             }
         }
         exit;
+    }
+
+    /**
+     * Append additional service worker bundles requested by third-party integrations.
+     *
+     * @since 1.9.5
+     *
+     * @param string[] $imports Existing list of script URLs passed to importScripts().
+     * @param string   $which   Which worker shell is being requested ("worker" or "updater").
+     * @param string   $scope   Final service worker scope.
+     * @return string[]
+     */
+    public function extend_service_worker_imports($imports, $which, $scope){
+        if ($which !== 'worker') {
+            return $imports;
+        }
+
+        /**
+         * Filters additional service worker bundles to load alongside WC Order Flow's primary worker shell.
+         *
+         * Use this hook to provide the URL or site-relative path to another script that should be registered
+         * at the root service worker scope (for example, a PWA manifest handler or a push notification SDK).
+         *
+         * @since 1.9.5
+         *
+         * @param string[] $workers Array of additional worker script URLs or paths relative to the site home.
+         * @param string   $scope   Final service worker scope passed to importScripts().
+         * @param string[] $imports Current list of script URLs that will be imported.
+         */
+        $additional = apply_filters('wcof_external_service_workers', [], $scope, $imports);
+
+        if (!is_array($additional) || empty($additional)) {
+            return $imports;
+        }
+
+        $additional = array_map('strval', $additional);
+        $normalized = [];
+
+        foreach ($additional as $url) {
+            $url = trim($url);
+            if ($url === '') {
+                continue;
+            }
+
+            $scheme = wp_parse_url($url, PHP_URL_SCHEME);
+            if (!is_string($scheme) || $scheme === '') {
+                if (strpos($url, '//') === 0) {
+                    $normalized[$url] = $url;
+                    continue;
+                }
+
+                $url = home_url($url);
+            }
+
+            $normalized[$url] = $url;
+        }
+
+        if (empty($normalized)) {
+            return $imports;
+        }
+
+        $existing = is_array($imports) ? array_map('strval', $imports) : [];
+        $merged   = array_merge($existing, array_values($normalized));
+
+        // Ensure unique URLs while preserving the original order as much as possible.
+        $unique = [];
+        foreach ($merged as $url) {
+            $url = trim($url);
+            if ($url === '') {
+                continue;
+            }
+
+            if (!isset($unique[$url])) {
+                $unique[$url] = $url;
+            }
+        }
+
+        return array_values($unique);
     }
 
     /* Avoid any 301/302 on SW files — redirects break registration */
